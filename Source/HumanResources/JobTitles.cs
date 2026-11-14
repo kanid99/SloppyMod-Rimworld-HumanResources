@@ -441,7 +441,7 @@ namespace SloppyHR
             Text.Font = GameFont.Small;
             if (held.Count < TimeUseTracker.MaxTitles && Widgets.ButtonText(new Rect(right.xMax - 150f, y, 150f, 28f), "Add title..."))
             {
-                var opts = t.titles.Where(x => !held.Contains(x)).Select(x => new FloatMenuOption(x.name, () => Add(t, x, pawn))).ToList();
+                var opts = t.TitlesSorted.Where(x => !held.Contains(x)).Select(x => new FloatMenuOption(x.name, () => Add(t, x, pawn))).ToList();
                 if (opts.Count == 0) opts.Add(new FloatMenuOption(t.titles.Count == 0 ? "No job titles yet. Make one in the Titles view." : "They already hold every title.", null));
                 Find.WindowStack.Add(new FloatMenu(opts));
             }

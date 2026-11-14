@@ -82,6 +82,9 @@ namespace SloppyHR
         List<string> titleOfPacked;
         readonly Dictionary<int, JobTitle> mergedCache = new Dictionary<int, JobTitle>();
 
+        // Titles in alphabetical order, for menus.
+        public List<JobTitle> TitlesSorted => titles.OrderBy(x => x.name ?? "", StringComparer.OrdinalIgnoreCase).ToList();
+
         JobTitle ById(int id)
         {
             for (int i = 0; i < titles.Count; i++) if (titles[i].id == id) return titles[i];

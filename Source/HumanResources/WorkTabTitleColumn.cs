@@ -22,7 +22,7 @@ namespace SloppyHR
             List<Pawn> all = table.PawnsListForReading.Where(p => p?.workSettings != null && p.workSettings.EverWork).ToList();
             int titled = all.Count(p => t.TitleFor(p) != null);
             var opts = new List<FloatMenuOption>();
-            foreach (JobTitle jt in t.titles)
+            foreach (JobTitle jt in t.TitlesSorted)
             {
                 JobTitle pick = jt;
                 opts.Add(new FloatMenuOption("Assign \"" + pick.name + "\" to all (" + all.Count + ")", () =>
@@ -75,7 +75,7 @@ namespace SloppyHR
             {
                 var opts = new List<FloatMenuOption>();
                 List<JobTitle> held = t.TitlesFor(pawn);
-                foreach (JobTitle jt in t.titles)
+                foreach (JobTitle jt in t.TitlesSorted)
                 {
                     JobTitle pick = jt;
                     if (held.Contains(pick)) continue;
@@ -83,7 +83,7 @@ namespace SloppyHR
                     else if (held.Count < TimeUseTracker.MaxTitles) opts.Add(new FloatMenuOption("Add as title " + (held.Count + 1) + ": " + pick.name, () => JobTitles.Add(t, pick, pawn)));
                 }
                 if (held.Count > 0)
-                    foreach (JobTitle jt in t.titles)
+                    foreach (JobTitle jt in t.TitlesSorted)
                     {
                         JobTitle pick = jt;
                         if (held.Count == 1 && held[0] == pick) continue;
