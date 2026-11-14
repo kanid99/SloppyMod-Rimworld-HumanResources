@@ -241,6 +241,138 @@ namespace SloppyHR
             return Mathf.Clamp(sum / stats.Count, 0.4f, 2f);
         }
 
+        // ---- what a colonist brings besides raw skill, for display: expertise, and traits and genes that affect work ----
+
+        public class Boost
+        {
+            public string kind;         // "Expertise", "Trait" or "Gene"
+            public string label, effect, helps;
+            public bool bad;            // makes them worse at work
+        }
+
+        static HashSet<StatDef> workStats;
+        static HashSet<StatDef> WorkStats()
+        {
+            if (workStats != null) return workStats;
+            Ensure();
+            var set = new HashSet<StatDef>();
+            foreach (WorkTypeDef wt in types) foreach (StatDef sd in StatsFor(wt)) set.Add(sd);
+            foreach (string[] names in ExpertiseStats.Values)
+                foreach (string name in names) { StatDef sd = DefDatabase<StatDef>.GetNamedSilentFail(name); if (sd != null) set.Add(sd); }
+            set.Add(StatDefOf.WorkSpeedGlobal);
+            StatDef labor = DefDatabase<StatDef>.GetNamedSilentFail("GeneralLaborSpeed");
+            if (labor != null) set.Add(labor);
+            return workStats = set;
+        }
+
+        // Which kinds of work a stat feeds, as role names.
+        static string HelpsText(IEnumerable<StatDef> stats)
+        {
+            var names = new List<string>();
+            foreach (StatDef sd in stats)
+            {
+                if (sd == StatDefOf.WorkSpeedGlobal || sd.defName == "GeneralLaborSpeed") { if (!names.Contains("all work")) names.Add("all work"); continue; }
+                foreach (WorkTypeDef wt in types)
+                {
+                    ExpertiseStats.TryGetValue(wt.defName, out string[] extra);
+                    if (!StatsFor(wt).Contains(sd) && !(extra != null && extra.Contains(sd.defName))) continue;
+                    string role = RoleName(wt);
+                    if (!names.Contains(role)) names.Add(role);
+                }
+            }
+            if (names.Count > 6) return string.Join(", ", names.Take(6)) + " and " + (names.Count - 6) + " more";
+            return string.Join(", ", names);
+        }
+
+        static void AddStatBoost(List<Boost> list, string kind, string label, List<StatModifier> offsets, List<StatModifier> factors, List<string> skillParts, float scale = 1f)
+        {
+            HashSet<StatDef> relevant = WorkStats();
+            var parts = new List<string>(skillParts ?? new List<string>());
+            var hit = new List<StatDef>();
+            float direction = 0f;
+            if (offsets != null)
+                foreach (StatModifier m in offsets)
+                {
+                    if (m?.stat == null || m.value == 0f || !relevant.Contains(m.stat)) continue;
+                    float v = m.value * scale;
+                    string text;
+                    try { text = m.stat.Worker.ValueToString(v, false, ToStringNumberSense.Offset); } catch { text = v.ToString("+0.##;-0.##"); }
+                    parts.Add(m.stat.LabelCap + " " + text);
+                    hit.Add(m.stat);
+                    direction += LowerIsBetter(m.stat) ? -v : v;
+                }
+            if (factors != null)
+                foreach (StatModifier m in factors)
+                {
+                    if (m?.stat == null || !relevant.Contains(m.stat)) continue;
+                    if (scale != 1f)
+                    {
+                        // expertise: the listed amount is per level
+                        float v = m.value * scale;
+                        if (v == 0f) continue;
+                        parts.Add(m.stat.LabelCap + " " + v.ToStringPercent("0").Insert(0, v > 0f ? "+" : ""));
+                        hit.Add(m.stat);
+                        direction += LowerIsBetter(m.stat) ? -v : v;
+                        continue;
+                    }
+                    if (m.value == 1f) continue;
+                    parts.Add(m.stat.LabelCap + " x" + m.value.ToString("0.##"));
+                    hit.Add(m.stat);
+                    direction += LowerIsBetter(m.stat) ? 1f - m.value : m.value - 1f;
+                }
+            if (parts.Count == 0) return;
+            list.Add(new Boost { kind = kind, label = label, effect = string.Join(", ", parts), helps = HelpsText(hit), bad = direction < 0f });
+        }
+
+        static bool LowerIsBetter(StatDef sd) => sd.defName == "FoodPoisonChance";
+
+        // Everything about a colonist, other than skill levels, that changes how good they are at work.
+        public static List<Boost> BoostsFor(Pawn p)
+        {
+            var list = new List<Boost>();
+            if (p == null) return list;
+            try
+            {
+                Ensure();
+                float mult = 1f;
+                try { mult = VseStatMultiplier(); } catch { }
+                foreach (ExpertiseInfo e in ExpertiseOf(p))
+                {
+                    int before = list.Count;
+                    AddStatBoost(list, "Expertise", e.label + " (level " + e.level + ")", e.offsets, e.factors, null, e.level * mult);
+                    if (list.Count == before) list.Add(new Boost { kind = "Expertise", label = e.label + " (level " + e.level + ")", effect = "No effect on the work stats this mod looks at.", helps = "" });
+                }
+                if (p.story?.traits != null)
+                    foreach (Trait t in p.story.traits.allTraits)
+                    {
+                        if (t.Suppressed || t.CurrentData == null) continue;
+                        var skills = new List<string>();
+                        if (t.CurrentData.skillGains != null)
+                            foreach (SkillGain g in t.CurrentData.skillGains) if (g?.skill != null && g.amount != 0) skills.Add(g.skill.LabelCap + " " + g.amount.ToStringWithSign());
+                        if (t.CurrentData.aptitudes != null)
+                            foreach (Aptitude a in t.CurrentData.aptitudes) if (a?.skill != null && a.level != 0) skills.Add(a.skill.LabelCap + " " + a.level.ToStringWithSign());
+                        int before = list.Count;
+                        AddStatBoost(list, "Trait", t.LabelCap, t.CurrentData.statOffsets, t.CurrentData.statFactors, skills);
+                        if (list.Count > before && skills.Count > 0 && skills.All(x => x.Contains("-")) && list[list.Count - 1].effect == string.Join(", ", skills)) list[list.Count - 1].bad = true;
+                    }
+                if (ModsConfig.BiotechActive && p.genes != null)
+                    foreach (Gene g in p.genes.GenesListForReading)
+                    {
+                        if (!g.Active) continue;
+                        var skills = new List<string>();
+                        if (g.def.aptitudes != null)
+                            foreach (Aptitude a in g.def.aptitudes) if (a?.skill != null && a.level != 0) skills.Add(a.skill.LabelCap + " " + a.level.ToStringWithSign());
+                        if (g.def.passionMod != null && g.def.passionMod.skill != null)
+                            skills.Add(g.def.passionMod.skill.LabelCap + (g.def.passionMod.modType == PassionMod.PassionModType.AddOneLevel ? " passion +1" : " passion removed"));
+                        int before = list.Count;
+                        AddStatBoost(list, "Gene", g.LabelCap, g.def.statOffsets, g.def.statFactors, skills);
+                        if (list.Count > before && skills.Count > 0 && skills.All(x => x.Contains("-") || x.Contains("removed")) && list[list.Count - 1].effect == string.Join(", ", skills)) list[list.Count - 1].bad = true;
+                    }
+            }
+            catch (Exception e) { Log.ErrorOnce(HR.Tag + "Listing a colonist's work boosts failed: " + e, 81730073); }
+            return list;
+        }
+
         // ---- Vanilla Skills Expanded (optional): expertise and its own passion types, read by reflection ----
 
         class ExpertiseInfo { public string label; public int level; public List<StatModifier> offsets, factors; }

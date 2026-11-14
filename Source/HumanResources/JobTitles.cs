@@ -343,6 +343,10 @@ namespace SloppyHR
 
         const int FilterAll = -2, FilterNone = -1;
         static int filterTitleId = FilterAll;      // colonist list filter: everyone, no title, or a title id
+        static List<JobAdvisor.Boost> boosts = new List<JobAdvisor.Boost>();
+        static int boostsFor = -1;
+        static float boostsAt;
+        static Vector2 colonistLowerScroll;
         static int mode;                    // 0 = titles, 1 = colonists
         static int dragFrom = -1;
         static Vector2 pawnScroll;
@@ -557,20 +561,65 @@ namespace SloppyHR
                 }, pawn);
             y += 6f;
 
-            // review
-            if (merged != null)
+            // everything below the boxes scrolls: the review, then expertise, traits and genes
+            if (boostsFor != pawn.thingIDNumber || RealTime.LastRealTime - boostsAt > 2f)
             {
-                string review = null;
-                bool concern = false;
-                try { review = ReviewFor(t, pawn, out concern); } catch { }
-                if (!review.NullOrEmpty())
-                {
-                    Text.Font = GameFont.Tiny;
-                    GUI.color = concern ? new Color(0.95f, 0.60f, 0.25f) : new Color(0.55f, 0.85f, 0.55f);
-                    Widgets.Label(new Rect(right.x, y, right.width, 40f), "Review: " + review);
-                    GUI.color = Color.white;
-                }
+                boostsFor = pawn.thingIDNumber;
+                boostsAt = RealTime.LastRealTime;
+                boosts = JobAdvisor.BoostsFor(pawn);
             }
+            string review = null;
+            bool concern = false;
+            if (merged != null) try { review = ReviewFor(t, pawn, out concern); } catch { }
+            Rect lower = new Rect(right.x, y, right.width, Mathf.Max(40f, right.yMax - y));
+            float lowerH = (review.NullOrEmpty() ? 0f : 44f) + 26f + Mathf.Max(1, boosts.Count) * 24f + 8f;
+            Rect lowerView = new Rect(0f, 0f, lower.width - 16f, lowerH);
+            Widgets.BeginScrollView(lower, ref colonistLowerScroll, lowerView);
+            float ly = 0f;
+            Text.Anchor = TextAnchor.UpperLeft;
+            if (!review.NullOrEmpty())
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = concern ? new Color(0.95f, 0.60f, 0.25f) : new Color(0.55f, 0.85f, 0.55f);
+                Widgets.Label(new Rect(0f, ly, lowerView.width, 40f), "Review: " + review);
+                GUI.color = Color.white;
+                ly += 44f;
+            }
+            Text.Font = GameFont.Tiny;
+            GUI.color = Color.gray;
+            Widgets.Label(new Rect(0f, ly, lowerView.width, 20f), "EXPERTISE, TRAITS AND GENES THAT AFFECT WORK   beyond the skill levels shown under the boxes. Orange makes them worse at it.");
+            GUI.color = Color.white;
+            ly += 26f;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            Text.WordWrap = false;
+            if (boosts.Count == 0)
+            {
+                GUI.color = Color.gray;
+                Widgets.Label(new Rect(0f, ly, lowerView.width, 22f), "None.");
+                GUI.color = Color.white;
+            }
+            for (int i = 0; i < boosts.Count; i++)
+            {
+                JobAdvisor.Boost bo = boosts[i];
+                Rect row = new Rect(0f, ly, lowerView.width, 22f);
+                if (i % 2 == 1) Widgets.DrawLightHighlight(row);
+                Text.Font = GameFont.Tiny;
+                GUI.color = bo.kind == "Expertise" ? new Color(0.40f, 0.80f, 0.95f) : bo.kind == "Gene" ? new Color(0.60f, 0.85f, 0.55f) : new Color(0.85f, 0.80f, 0.60f);
+                Widgets.Label(new Rect(4f, ly, 70f, 22f), bo.kind.ToUpperInvariant());
+                GUI.color = bo.bad ? new Color(0.95f, 0.60f, 0.25f) : Color.white;
+                Text.Font = GameFont.Small;
+                Widgets.Label(new Rect(78f, ly, 200f, 22f), bo.label.Truncate(196f));
+                Text.Font = GameFont.Tiny;
+                float effW = Mathf.Max(200f, (lowerView.width - 290f) * 0.55f);
+                Widgets.Label(new Rect(284f, ly, effW, 22f), bo.effect.Truncate(effW - 6f));
+                GUI.color = new Color(1f, 1f, 1f, 0.6f);
+                if (!bo.helps.NullOrEmpty()) Widgets.Label(new Rect(284f + effW, ly, lowerView.width - 284f - effW, 22f), ("helps: " + bo.helps).Truncate(lowerView.width - 290f - effW));
+                GUI.color = Color.white;
+                if (Mouse.IsOver(row)) TooltipHandler.TipRegion(row, bo.kind + ": " + bo.label + "\n\n" + bo.effect + (bo.helps.NullOrEmpty() ? "" : "\n\nAffects: " + bo.helps));
+                ly += 24f;
+            }
+            Text.WordWrap = true;
+            Widgets.EndScrollView();
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
         }
