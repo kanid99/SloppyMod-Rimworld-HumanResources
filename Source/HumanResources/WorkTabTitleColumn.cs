@@ -70,7 +70,7 @@ namespace SloppyHR
             Widgets.DrawHighlight(r);
             TooltipHandler.TipRegion(r, title == null
                 ? "No job title. Click to give this colonist one."
-                : "Job title: " + title.name + (review.NullOrEmpty() ? "" : "\n\n" + review) + (handSet > 0 ? "\n\n* " + handSet + " box" + (handSet == 1 ? "" : "es") + " set by hand on top of the title" + (t.TitleCount(pawn) > 1 ? "s" : "") + ". They are kept when titles change; clear them on the HR tab, Job titles, Colonists." : "") + "\n\nThe HR advisor leaves this colonist's priorities alone while they hold a title. Click to add, reorder or remove titles (up to 3; the first is the main job).");
+                : "Job title: " + title.name + (review.NullOrEmpty() ? "" : "\n\n" + review) + (handSet > 0 ? "\n\n* " + handSet + " box" + (handSet == 1 ? "" : "es") + " set by hand on top of the title" + (t.TitleCount(pawn) > 1 ? "s" : "") + ". They are kept when titles change; clear them on the HR tab, Job titles, Colonists." : "") + "\n\nThe HR advisor leaves this colonist's priorities alone while they hold a title. Click to add, reorder or remove titles (up to 5; the first is the main job).");
             if (Widgets.ButtonInvisible(r))
             {
                 var opts = new List<FloatMenuOption>();

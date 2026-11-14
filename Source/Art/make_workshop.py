@@ -164,7 +164,7 @@ if __name__ == "__main__":
     glance(os.path.join(ws, "glance.png"), [
         ("4", "HR pages", "Time use, Job advisor, Workload and Job titles"),
         ("1.7", "RimWorld", "Built for 1.7 only"),
-        ("3", "Titles per colonist", "Merged in the order you set"),
+        ("5", "Titles per colonist", "Merged in the order you set"),
         ("2", "Days of workload", "Tells a busy day from work nobody does"),
         ("1", "Requirement", "Harmony. No DLC needed"),
         ("0", "New items", "No buildings, research or defs to learn"),
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     ])
     tiles(os.path.join(ws, "titles.png"), [
         ("Build a title once", "Name it, click its priorities on a row laid out like the Work tab, and assign it to as many colonists as you like."),
-        ("Up to three per colonist", "Doctor, then Crafter, then a baseline. Each title is used as written and they are merged together."),
+        ("Up to five per colonist", "Doctor, then Crafter, then a baseline. Each title is used as written and they are merged together."),
         ("The higher title wins", "Two titles only conflict when both set the same kind of work. Drag a colonist's titles into order to decide which wins."),
         ("Hand edits are kept", "Change a title holder's box on the Work tab and it is remembered on top of their titles, and marked."),
         ("A library for every game", "Save a title to the library and load it into any other colony."),

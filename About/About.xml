@@ -3,19 +3,19 @@
   <name>SloppyMods - Human Resources</name>
   <author>SloppyMod</author>
   <packageId>sloppymod.humanresources</packageId>
-  <modVersion>0.9.6</modVersion>
+  <modVersion>0.9.7</modVersion>
   <!-- 1.7 on the Waylith engine only: the assembly is built against Waylith's .NET 10 game assemblies. -->
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
-  <description>Build 0.9.6
+  <description>Build 0.9.7
 
 An HR manager for your colony. Adds an HR button to the bottom bar with four pages:
 
 - Time use: how each colonist spent the last hours or days, by kind of work, sleep, recreation, idling and walking.
 - Job advisor: suggested work priorities for each colonist from skill, passions, traits, genes and health, with an Apply button and an optional daily review.
 - Workload: which kinds of work are keeping up, falling behind or not being worked at all, tracked over two days, with a click-through to the work that is waiting.
-- Job titles: your own named templates of work priorities. Assign up to three to a colonist, see who suits a title best, and keep a library of titles that is shared between all your games.
+- Job titles: your own named templates of work priorities. Assign up to five to a colonist, see who suits a title best, and keep a library of titles that is shared between all your games.
 
 Also adds a Title column to the Work tab and an optional badge on colonist portraits showing what each colonist is doing.
 

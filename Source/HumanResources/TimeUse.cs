@@ -75,7 +75,7 @@ namespace SloppyHR
         // Job titles: player-made templates of work priorities, and which colonist holds which.
         public List<JobTitle> titles = new List<JobTitle>();
         // A colonist can hold up to MaxTitles titles, in order: the first is their main job.
-        public const int MaxTitles = 3;
+        public const int MaxTitles = 5;
         public bool reappliedThisLoad;       // not saved
         public Dictionary<int, List<int>> titleOf = new Dictionary<int, List<int>>();     // pawn id -> title ids, in order
         public int nextTitleId = 1;

@@ -237,7 +237,7 @@ namespace SloppyHR
         // window width that fits the title list plus every work type in a single row
         public static float WantedWidth => 244f + JobAdvisor.Types.Count * CellW + HeaderOverhang;
 
-        static readonly Color[] SourceColors = { new Color(0.40f, 0.75f, 1.00f), new Color(1.00f, 0.72f, 0.30f), new Color(0.80f, 0.55f, 0.95f) };
+        static readonly Color[] SourceColors = { new Color(0.40f, 0.75f, 1.00f), new Color(1.00f, 0.72f, 0.30f), new Color(0.80f, 0.55f, 0.95f), new Color(0.55f, 0.90f, 0.50f), new Color(1.00f, 0.50f, 0.60f) };
         static readonly Color HandColor = new Color(1f, 1f, 1f);
 
         // One row of work-priority boxes laid out like the Work tab (wraps if the width is too small). Returns the height used.
@@ -378,7 +378,7 @@ namespace SloppyHR
             {
                 GUI.color = Color.gray;
                 Widgets.Label(new Rect(right.x, right.y, right.width, 90f),
-                    "Pick a colonist to see the titles they hold, put them in order, and see the work priorities those titles add up to.\nA colonist can hold up to 3 titles. The first is their main job.");
+                    "Pick a colonist to see the titles they hold, put them in order, and see the work priorities those titles add up to.\nA colonist can hold up to 5 titles. The first is their main job.");
                 GUI.color = Color.white;
                 Text.Anchor = TextAnchor.UpperLeft;
                 return;
@@ -721,7 +721,7 @@ namespace SloppyHR
             Widgets.Label(new Rect(0f, y, 300f, 28f), "Holds this title (" + holders.Count + ")");
             GUI.color = Color.gray;
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(300f, y, view.width - 460f, 28f), "A colonist can hold up to 3 titles, all used as written. Where two set the same kind of work, the one higher in their list wins.");
+            Widgets.Label(new Rect(300f, y, view.width - 460f, 28f), "A colonist can hold up to 5 titles, all used as written. Where two set the same kind of work, the one higher in their list wins.");
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
             if (Widgets.ButtonText(new Rect(view.width - 150f, y, 150f, 28f), "Assign colonist..."))

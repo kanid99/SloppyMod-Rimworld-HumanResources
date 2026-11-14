@@ -13,7 +13,7 @@ systematic testing.
 | Time use | How each colonist spent the last hours or days: each kind of work, sleep, eating, recreation, idling, and how much of it was walking. Click a category to hide it and recalculate. |
 | Job advisor | Suggested work priorities per colonist, scored from skill, passions, traits, genes, health and (with Vanilla Skills Expanded) expertise. Apply per colonist or for everyone, undo the last apply, and optionally let it review assignments once a day. |
 | Workload | Which kinds of work are keeping up and which are not, tracked over two days. Tells apart work that needs more workers from work nobody is assigned to. Click a row to step the camera through the waiting work and see why it is not being done. |
-| Job titles | Named templates of work priorities that you create and assign. A colonist can hold up to three titles, merged in order. The advisor leaves title holders alone and only reports when a title is a poor fit. Titles can be saved to a library shared between all games. |
+| Job titles | Named templates of work priorities that you create and assign. A colonist can hold up to five titles, merged in order. The advisor leaves title holders alone and only reports when a title is a poor fit. Titles can be saved to a library shared between all games. |
 
 Mod options (Options, Mod settings, SloppyMods - Human Resources) let you leave workbenches or bills out of
 the workload analysis, for standing bills that only have work now and then.
