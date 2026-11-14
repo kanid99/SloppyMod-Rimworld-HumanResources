@@ -243,11 +243,11 @@ namespace SloppyHR
         // One row of work-priority boxes laid out like the Work tab (wraps if the width is too small). Returns the height used.
         // enabled: null = all; mark: a coloured bar under the box; outlined: a white frame around it.
         static float DrawStrip(float x, float y, float width, List<WorkTypeDef> types, Func<WorkTypeDef, int> get, Func<WorkTypeDef, bool> enabled,
-            Func<WorkTypeDef, Color?> mark, Func<WorkTypeDef, bool> outlined, Action<WorkTypeDef, int, int> click, Func<WorkTypeDef, string> tip)
+            Func<WorkTypeDef, Color?> mark, Func<WorkTypeDef, bool> outlined, Action<WorkTypeDef, int, int> click, Func<WorkTypeDef, string> tip, Pawn pawn = null)
         {
             int perStrip = Mathf.Clamp(Mathf.FloorToInt((width - HeaderOverhang) / CellW), 1, Mathf.Max(1, types.Count));
             int strips = Mathf.CeilToInt(types.Count / (float)perStrip);
-            float stripH = HeaderH + CellW + 12f;
+            float stripH = HeaderH + CellW + (pawn != null ? 26f : 12f);     // room for the skill level under each box
             for (int i = 0; i < types.Count; i++)
             {
                 WorkTypeDef wt = types[i];
@@ -271,7 +271,20 @@ namespace SloppyHR
 
                 // the box
                 GUI.color = on ? Color.white : new Color(1f, 1f, 1f, 0.25f);
-                GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
+                if (pawn != null && on && !DrawVanillaBackground(box, pawn, wt)) GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
+                else if (pawn == null || !on) GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
+                GUI.color = Color.white;
+                if (pawn != null && on && !wt.relevantSkills.NullOrEmpty())
+                {
+                    // skill level under the box, brighter with a passion
+                    float avg = pawn.skills.AverageOfRelevantSkillsFor(wt);
+                    Passion ps = pawn.skills.MaxPassionOfRelevantSkillsFor(wt);
+                    Text.Font = GameFont.Tiny;
+                    Text.Anchor = TextAnchor.UpperCenter;
+                    GUI.color = ps != Passion.None ? new Color(1f, 0.82f, 0.35f) : avg >= 8f ? Color.white : new Color(1f, 1f, 1f, 0.55f);
+                    Widgets.Label(new Rect(box.x - 4f, box.yMax + 5f, box.width + 8f, 18f), avg.ToString("0") + (ps != Passion.None ? "*" : ""));
+                    GUI.color = Color.white;
+                }
                 if (on && pr > 0)
                 {
                     Text.Font = GameFont.Medium;
@@ -289,6 +302,14 @@ namespace SloppyHR
                 {
                     Widgets.DrawHighlight(box);
                     string extra = tip?.Invoke(wt);
+                    if (pawn != null && on)
+                    {
+                        string skillText = JobAdvisor.SkillText(pawn, wt);
+                        string own = skillText == null ? "No skill involved." : JobAdvisor.IsSkilled(wt)
+                            ? pawn.LabelShortCap + ": " + skillText + ". Advisor fit " + JobAdvisor.Score(pawn, wt).ToString("0.0") + "."
+                            : pawn.LabelShortCap + ": " + skillText + ". The advisor treats this work as unskilled.";
+                        extra = extra.NullOrEmpty() ? own : own + "\n\n" + extra;
+                    }
                     TooltipHandler.TipRegion(box, wt.gerundLabel.CapitalizeFirst() + (unskilled ? " (unskilled)" : "")
                         + "\n" + wt.defName + ", from " + (wt.modContentPack?.Name ?? "unknown")
                         + (!on ? "\n\nThis colonist can't do this work." : "") + (extra.NullOrEmpty() ? "" : "\n\n" + extra));
@@ -301,6 +322,21 @@ namespace SloppyHR
                 }
             }
             return strips * stripH;
+        }
+
+        // The Work tab's own box background: shaded by skill, with the passion flame (and whatever other mods add to it).
+        static System.Reflection.MethodInfo vanillaBackground;
+        static bool vanillaBackgroundLooked;
+        static bool DrawVanillaBackground(Rect box, Pawn pawn, WorkTypeDef wt)
+        {
+            if (!vanillaBackgroundLooked)
+            {
+                vanillaBackgroundLooked = true;
+                try { vanillaBackground = HarmonyLib.AccessTools.Method(typeof(WidgetsWork), "DrawWorkBoxBackground", new[] { typeof(Rect), typeof(Pawn), typeof(WorkTypeDef) }); } catch { }
+            }
+            if (vanillaBackground == null) return false;
+            try { vanillaBackground.Invoke(null, new object[] { box, pawn, wt }); GUI.color = Color.white; return true; }
+            catch { vanillaBackground = null; GUI.color = Color.white; return false; }
         }
 
         // ---- Colonists view: one colonist's titles in order, and what they merge into ----
@@ -359,7 +395,7 @@ namespace SloppyHR
                 Widgets.Label(new Rect(6f, r.y + 18f, r.width - 8f, 18f), m == null ? "no title" : m.name.Truncate(r.width - 8f));
                 GUI.color = Color.white;
                 Text.WordWrap = true;
-                if (Widgets.ButtonInvisible(r)) { HrSelection.Set(p.thingIDNumber); HrSelection.TakeScroll(2); dragFrom = -1; }
+                if (Widgets.ButtonInvisible(r)) { HrSelection.Set(p.thingIDNumber); HrSelection.TakeScroll(2); HrSelection.SelectInGame(p); dragFrom = -1; }
             }
             Widgets.EndScrollView();
             Text.Font = GameFont.Small;
@@ -482,7 +518,7 @@ namespace SloppyHR
             Text.Font = GameFont.Tiny;
             Widgets.Label(new Rect(right.x, y, right.width - 200f, 20f), held.Count == 0
                 ? "CURRENT WORK PRIORITIES   the same as the Work tab."
-                : "WORK PRIORITIES THE GAME USES   the bar under a box shows which title it comes from. A white frame is a box you set by hand; click a box to set one.");
+                : "WORK PRIORITIES THE GAME USES   boxes are shaded by skill as on the Work tab, with the skill level underneath (* = passion). The bar shows which title a box comes from; a white frame is a box you set by hand.");
             GUI.color = Color.white;
             int handCount = hand?.Count ?? 0;
             if (handCount > 0)
@@ -518,7 +554,7 @@ namespace SloppyHR
                     var parts = new List<string>();
                     for (int i = 0; i < held.Count; i++) { int pr = held[i].Get(wt); if (pr > 0) parts.Add(held[i].name + ": " + pr + (parts.Count == 0 ? (held.Count > 1 ? "  (used)" : "") : "  (not used: a title above sets this)")); }
                     return parts.Count == 0 ? "None of their titles include this work." : string.Join("\n", parts);
-                });
+                }, pawn);
             y += 6f;
 
             // review

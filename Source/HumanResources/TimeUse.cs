@@ -848,6 +848,20 @@ namespace SloppyHR
             for (int i = 0; i < scrollPending.Length; i++) scrollPending[i] = true;
         }
 
+        // Picking a colonist inside HR also selects them in the game (without moving the camera), so the Work tab
+        // and the rest of the interface follow.
+        public static void SelectInGame(Pawn p)
+        {
+            try
+            {
+                if (p == null || !p.Spawned || p.Map != Find.CurrentMap || Find.Selector.IsSelected(p)) return;
+                Find.Selector.ClearSelection();
+                Find.Selector.Select(p, false, false);
+                lastGameSelection = p;
+            }
+            catch { }
+        }
+
         // True once per selection change for each page, so the page can scroll its list to the colonist.
         public static bool TakeScroll(int page)
         {

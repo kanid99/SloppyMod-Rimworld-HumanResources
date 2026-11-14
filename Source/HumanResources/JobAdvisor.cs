@@ -42,7 +42,63 @@ namespace SloppyHR
         // patients, none of which is Medicine work. It is treated as unskilled, and kept off colonists with a medical role.
         static readonly HashSet<string> CareTypes = new HashSet<string> { "FSFNurse" };
         static readonly HashSet<string> MedicalRoleTypes = new HashSet<string> { "Doctor", "FSFSurgeon" };
-        static bool NoSkill(WorkTypeDef wt) => wt.relevantSkills.NullOrEmpty() || CareTypes.Contains(wt.defName);
+        static bool NoSkill(WorkTypeDef wt) => wt.relevantSkills.NullOrEmpty() || CareTypes.Contains(wt.defName) || BenchNoSkill().Contains(wt.defName);
+
+        // Bench-only work types that list a skill although none of their recipes uses or trains one (refining chemfuel,
+        // for example). Worked out from the recipes actually in the game, so other mods' benches are counted too.
+        static HashSet<string> benchNoSkill;
+        static HashSet<string> BenchNoSkill()
+        {
+            if (benchNoSkill != null) return benchNoSkill;
+            var result = new HashSet<string>();
+            try
+            {
+                var benches = new Dictionary<WorkTypeDef, List<ThingDef>>();
+                var mixed = new HashSet<WorkTypeDef>();     // work types with something other than bench bills in them
+                foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
+                {
+                    if (wg.workType == null) continue;
+                    if (wg.fixedBillGiverDefs.NullOrEmpty()) { mixed.Add(wg.workType); continue; }
+                    if (!benches.TryGetValue(wg.workType, out List<ThingDef> list)) benches[wg.workType] = list = new List<ThingDef>();
+                    list.AddRange(wg.fixedBillGiverDefs.Where(d => d != null));
+                }
+                foreach (var kv in benches)
+                {
+                    if (mixed.Contains(kv.Key) || kv.Key.relevantSkills.NullOrEmpty()) continue;
+                    bool anySkilled = false, anyRecipe = false;
+                    foreach (ThingDef bench in kv.Value)
+                    {
+                        List<RecipeDef> recipes = null;
+                        try { recipes = bench.AllRecipes; } catch { }
+                        if (recipes == null) continue;
+                        foreach (RecipeDef r in recipes)
+                        {
+                            anyRecipe = true;
+                            if ((r.workSkill != null && r.workSkillLearnFactor > 0f) || !r.skillRequirements.NullOrEmpty()) { anySkilled = true; break; }
+                        }
+                        if (anySkilled) break;
+                    }
+                    if (anyRecipe && !anySkilled) result.Add(kv.Key.defName);
+                }
+                if (result.Count > 0) Log.Message(HR.Tag + "Treated as unskilled because none of their recipes use a skill: " + string.Join(", ", result));
+            }
+            catch (Exception e) { Log.Warning(HR.Tag + "could not check bench recipes for skill use: " + e.Message); }
+            return benchNoSkill = result;
+        }
+
+        // "Medicine 7 (burning)" for each skill a kind of work uses; null for unskilled work.
+        public static string SkillText(Pawn p, WorkTypeDef wt)
+        {
+            if (p?.skills == null || wt.relevantSkills.NullOrEmpty()) return null;
+            var parts = new List<string>();
+            foreach (SkillDef sd in wt.relevantSkills)
+            {
+                SkillRecord rec = p.skills.GetSkill(sd);
+                if (rec == null) continue;
+                parts.Add(sd.LabelCap + " " + (rec.TotallyDisabled ? "-" : rec.Level.ToString()) + (rec.passion != Passion.None ? " (" + PassionLabel(rec.passion) + " passion)" : ""));
+            }
+            return parts.Count == 0 ? null : string.Join(", ", parts);
+        }
 
         static readonly HashSet<string> FixedTypes = new HashSet<string> { "Firefighter", "Patient", "PatientBedRest", "FSFRescue", "FSFSelfTend" };
         static List<WorkTypeDef> types = new List<WorkTypeDef>();
@@ -979,7 +1035,7 @@ namespace SloppyHR
                 string lab = types[t].labelShort.CapitalizeFirst();
                 int max = Mathf.Max(2, Mathf.FloorToInt(cw / 6.5f));
                 Widgets.Label(h, lab.Length > max ? lab.Substring(0, max) : lab);
-                TooltipHandler.TipRegion(h, lab + (slots.TryGetValue(types[t], out int hcap) ? "\nLast day: " + dayHours[types[t]].ToString("0.#") + " colonist-hours, enough for " + hcap + " at priority 1." : "") + (FixedTypes.Contains(types[t].defName) ? "\nLeft alone by the advisor." : CareTypes.Contains(types[t].defName) ? "\nCare work (feeding, carrying and visiting patients). It doesn't train Medicine, so it is treated as unskilled and kept off colonists with a medical role." : types[t].relevantSkills.NullOrEmpty() ? "\nUnskilled work." : "\nSkills: " + string.Join(", ", types[t].relevantSkills.Select(s => s.label))));
+                TooltipHandler.TipRegion(h, lab + (slots.TryGetValue(types[t], out int hcap) ? "\nLast day: " + dayHours[types[t]].ToString("0.#") + " colonist-hours, enough for " + hcap + " at priority 1." : "") + (FixedTypes.Contains(types[t].defName) ? "\nLeft alone by the advisor." : BenchNoSkill().Contains(types[t].defName) ? "\nNone of this work's recipes use or train a skill, so it is treated as unskilled." : CareTypes.Contains(types[t].defName) ? "\nCare work (feeding, carrying and visiting patients). It doesn't train Medicine, so it is treated as unskilled and kept off colonists with a medical role." : types[t].relevantSkills.NullOrEmpty() ? "\nUnskilled work." : "\nSkills: " + string.Join(", ", types[t].relevantSkills.Select(s => s.label))));
             }
 
             Text.WordWrap = true;
