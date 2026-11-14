@@ -102,9 +102,8 @@ namespace SloppyHR
 
         // What a colonist's titles add up to: the title itself when they hold one, otherwise a merged title
         // named "A + B". Null when they hold none.
-        // Merge rule: a title is used as written unless its top priority would tie with or beat the top priority of
-        // the title above it; then all of its numbers are pushed down just far enough to sit below (never past 4).
-        // Each kind of work then takes the best number any title gives it.
+        // Merge rule: every title's numbers are used exactly as written. Only when two titles set the same kind of
+        // work is there a conflict, and then the title higher in the colonist's list wins.
         public JobTitle TitleFor(Pawn p)
         {
             if (p == null || !titleOf.ContainsKey(p.thingIDNumber)) return null;
@@ -115,14 +114,9 @@ namespace SloppyHR
             else if (list.Count > 1)
             {
                 result = new JobTitle { id = -1, name = string.Join(" + ", list.Select(x => x.name)) };
-                List<int> shifts = TitleShifts(list);
                 for (int i = 0; i < list.Count; i++)
                     foreach (var kv in list[i].prio)
-                    {
-                        if (kv.Value <= 0) continue;
-                        int pushed = Math.Min(4, kv.Value + shifts[i]);
-                        if (!result.prio.TryGetValue(kv.Key, out int have) || pushed < have) result.prio[kv.Key] = pushed;
-                    }
+                        if (kv.Value > 0 && !result.prio.ContainsKey(kv.Key)) result.prio[kv.Key] = kv.Value;
             }
             mergedCache[p.thingIDNumber] = result;
             return result;
@@ -150,23 +144,6 @@ namespace SloppyHR
         }
 
         public void ClearOverrides(Pawn p) { if (p != null) overrides.Remove(p.thingIDNumber); }
-
-        // How many steps each title in an ordered list is pushed down when merged (see TitleFor).
-        public static List<int> TitleShifts(List<JobTitle> list)
-        {
-            var shifts = new List<int>();
-            int aboveTop = 0;       // the top priority, after pushing, of the title above
-            foreach (JobTitle jt in list)
-            {
-                int top = 0;
-                foreach (var kv in jt.prio) if (kv.Value > 0 && (top == 0 || kv.Value < top)) top = kv.Value;
-                if (top == 0) { shifts.Add(0); continue; }      // an empty title
-                int shift = Math.Max(0, aboveTop + 1 - top);
-                shifts.Add(shift);
-                aboveTop = Math.Min(4, top + shift);
-            }
-            return shifts;
-        }
 
         // Call after anything about titles changes (assignments, a title's priorities or its name).
         public void TitlesChanged() => mergedCache.Clear();
