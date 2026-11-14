@@ -22,6 +22,11 @@ namespace SloppyHR
             int now = Find.TickManager.TicksGame;
             int hour = now / GenDate.TicksPerHour;
 
+            // the default title reaches colonists who joined since it was set
+            if (t.defaultTitleId >= 0)
+                foreach (Pawn p in JobAdvisor.Colonists())
+                    if (t.DefaultAppliesTo(p) && t.defaultApplied.Add(p.thingIDNumber)) JobTitles.Reapply(t, p);
+
             if (t.resting.Count > 0)
             {
                 t.backlog.TryGetValue(hour, out var latest);

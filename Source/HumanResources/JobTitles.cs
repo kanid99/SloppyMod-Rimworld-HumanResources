@@ -463,7 +463,9 @@ namespace SloppyHR
             Widgets.Label(new Rect(right.x + 226f, y, right.width - 400f, 28f), "advisor role: " + JobAdvisor.RoleText(pawn));
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
-            if (held.Count < TimeUseTracker.MaxTitles && Widgets.ButtonText(new Rect(right.xMax - 150f, y, 150f, 28f), "Add title..."))
+            int ownCount = t.OwnTitlesFor(pawn).Count;      // the default title sits after these and can't be moved
+            JobTitle defaultTitle = t.DefaultTitle;
+            if (ownCount < TimeUseTracker.MaxTitles && Widgets.ButtonText(new Rect(right.xMax - 150f, y, 150f, 28f), "Add title..."))
             {
                 var opts = t.TitlesSorted.Where(x => !held.Contains(x)).Select(x => new FloatMenuOption(x.name, () => Add(t, x, pawn))).ToList();
                 if (opts.Count == 0) opts.Add(new FloatMenuOption(t.titles.Count == 0 ? "No job titles yet. Make one in the Titles view." : "They already hold every title.", null));
@@ -474,7 +476,7 @@ namespace SloppyHR
             // titles in order
             GUI.color = Color.gray;
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row up or down to change the order. Every title is used as written. Where two titles set the same kind of work, the higher one wins.");
+            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row up or down to change the order. Every title is used as written. Where two titles set the same kind of work, the higher one wins. The default title is always last.");
             GUI.color = Color.white;
             y += 22f;
             if (held.Count == 0)
@@ -486,13 +488,13 @@ namespace SloppyHR
             }
             // Drag to reorder: hold the mouse on a row and move it; the rows swap live as the cursor crosses them.
             float listTop = y;
-            if (dragFrom >= held.Count) dragFrom = -1;
+            if (dragFrom >= ownCount) dragFrom = -1;
             if (dragFrom >= 0)
             {
                 if (!Input.GetMouseButton(0)) dragFrom = -1;        // released (anywhere)
                 else
                 {
-                    int target = Mathf.Clamp(Mathf.FloorToInt((Event.current.mousePosition.y - listTop) / 32f), 0, held.Count - 1);
+                    int target = Mathf.Clamp(Mathf.FloorToInt((Event.current.mousePosition.y - listTop) / 32f), 0, ownCount - 1);
                     if (target != dragFrom)
                     {
                         MoveTitle(t, pawn, dragFrom, target);
@@ -510,15 +512,16 @@ namespace SloppyHR
                 Widgets.DrawBoxSolid(new Rect(row.x, row.y, 5f, row.height), SourceColors[i % SourceColors.Length]);
                 if (dragging) Widgets.DrawBox(row, 1);
                 else if (dragFrom < 0) Widgets.DrawHighlightIfMouseover(row);
+                bool isDef = t.IsDefault(jt);
                 // grip
-                if (held.Count > 1)
+                if (ownCount > 1 && !isDef)
                 {
                     Color grip = new Color(1f, 1f, 1f, dragging ? 0.9f : 0.35f);
                     for (int g = 0; g < 3; g++) Widgets.DrawBoxSolid(new Rect(row.x + 12f, row.y + 9f + g * 5f, 14f, 2f), grip);
                 }
                 Text.Font = GameFont.Small;
                 Widgets.Label(new Rect(row.x + 36f, row.y, 30f, 30f), (i + 1) + ".");
-                Widgets.Label(new Rect(row.x + 62f, row.y, row.width - 330f, 30f), jt.name);
+                Widgets.Label(new Rect(row.x + 62f, row.y, row.width - 330f, 30f), isDef ? jt.name + "  (default)" : jt.name);
                 GUI.color = Color.gray;
                 Text.Font = GameFont.Tiny;
                 int lost = 0;       // kinds of work this title sets that a title above it also sets
@@ -530,14 +533,26 @@ namespace SloppyHR
                 Widgets.Label(new Rect(row.xMax - 250f, row.y, 170f, 30f), lost == 0 ? "all used as written" : lost + " set by a title above");
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
-                if (dragFrom < 0 && Widgets.ButtonText(new Rect(row.xMax - 70f, row.y + 3f, 68f, 24f), "Remove")) { Remove(t, jt, pawn); Text.Anchor = TextAnchor.UpperLeft; return; }
+                Rect remRect = new Rect(row.xMax - 70f, row.y + 3f, 68f, 24f);
+                if (dragFrom < 0 && Widgets.ButtonText(remRect, "Remove")) { Remove(t, jt, pawn); Text.Anchor = TextAnchor.UpperLeft; return; }
+                if (isDef) TooltipHandler.TipRegion(remRect, "Switch the default title off for this colonist only.");
                 Rect grab = new Rect(row.x, row.y, row.width - 76f, row.height);
-                if (held.Count > 1 && dragFrom < 0 && Mouse.IsOver(grab))
+                if (ownCount > 1 && !isDef && dragFrom < 0 && Mouse.IsOver(grab))
                 {
                     TooltipHandler.TipRegion(grab, "Hold and drag up or down to change the order.");
                     if (Event.current.type == EventType.MouseDown && Event.current.button == 0) { dragFrom = i; Event.current.Use(); }
                 }
                 y += 32f;
+            }
+            if (defaultTitle != null && !t.DefaultAppliesTo(pawn) && pawn.workSettings != null && pawn.workSettings.EverWork)
+            {
+                GUI.color = Color.gray;
+                Text.Font = GameFont.Tiny;
+                Widgets.Label(new Rect(right.x, y, 420f, 26f), "The default title \"" + defaultTitle.name + "\" is switched off for this colonist.");
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+                if (Widgets.ButtonText(new Rect(right.x + 430f, y, 120f, 24f), "Use default")) { Add(t, defaultTitle, pawn); Text.Anchor = TextAnchor.UpperLeft; return; }
+                y += 30f;
             }
             y += 8f;
 
@@ -651,7 +666,7 @@ namespace SloppyHR
         static void MoveTitle(TimeUseTracker t, Pawn p, int from, int to)
         {
             if (!t.titleOf.TryGetValue(p.thingIDNumber, out List<int> ids)) return;
-            List<JobTitle> held = t.TitlesFor(p);
+            List<JobTitle> held = t.OwnTitlesFor(p);       // the default title is never part of the order
             if (from < 0 || to < 0 || from >= held.Count || to >= held.Count || from == to) return;
             JobTitle moving = held[from];
             held.RemoveAt(from);
@@ -732,8 +747,8 @@ namespace SloppyHR
                 Rect r = new Rect(0f, i * 30f, listView.width, 28f);
                 if (jt.id == selectedId) Widgets.DrawHighlightSelected(r);
                 else Widgets.DrawHighlightIfMouseover(r);
-                int n = t.titleOf.Count(kv => kv.Value.Contains(jt.id));
-                Widgets.Label(new Rect(6f, r.y, r.width - 40f, 28f), jt.name);
+                int n = pawns.Count(p => t.HasTitle(p, jt));
+                Widgets.Label(new Rect(6f, r.y, r.width - 40f, 28f), (t.IsDefault(jt) ? jt.name + "  (default)" : jt.name).Truncate(r.width - 44f));
                 GUI.color = Color.gray;
                 Text.Anchor = TextAnchor.MiddleRight;
                 Widgets.Label(new Rect(r.width - 40f, r.y, 34f, 28f), n.ToString());
@@ -779,6 +794,26 @@ namespace SloppyHR
                 Text.Anchor = TextAnchor.UpperLeft;
                 return;
             }
+            bool isDefault = t.IsDefault(title);
+            Rect defRect = new Rect(right.xMax - 530f, y, 160f, 28f);
+            if (Widgets.ButtonText(defRect, isDefault ? "Default: yes" : "Make default"))
+            {
+                JobTitle old = t.DefaultTitle;
+                if (isDefault)
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("Stop using \"" + title.name + "\" as the default title?\n\nColonists who only had it through the default no longer hold it. Their work priorities stay as they are.",
+                        () => { t.SetDefault(null); JobAdvisor.Invalidate(); }));
+                else
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("Make \"" + title.name + "\" the default title?\n\nEvery colonist (" + pawns.Count + " now, and anyone who joins) holds it automatically as their lowest title, below any titles you give them. Everyone's work priorities are set from their titles now."
+                        + (old != null ? "\n\nIt replaces the current default, \"" + old.name + "\"." : "")
+                        + "\n\nThe HR advisor does not change colonists who hold a title, so it will stop changing anyone's priorities.",
+                        () =>
+                        {
+                            t.SetDefault(title);
+                            foreach (Pawn p in pawns) { if (t.DefaultAppliesTo(p)) t.defaultApplied.Add(p.thingIDNumber); Reapply(t, p); }
+                        }));
+            }
+            TooltipHandler.TipRegion(defRect, "The default title is held by every colonist automatically, always as their lowest title, and is given to new colonists when they join. It does not count toward the limit of " + TimeUseTracker.MaxTitles + " titles. It can be switched off for single colonists in the Colonists view.");
+            if (isDefault) Widgets.DrawHighlightSelected(defRect);
             Rect copyRect = new Rect(right.xMax - 226f, y, 110f, 28f);
             if (Widgets.ButtonText(copyRect, "Copy title"))
             {
@@ -871,7 +906,7 @@ namespace SloppyHR
                 string order = theirs.Count > 1 ? "Title " + (pos + 1) + " of " + theirs.Count + " (" + string.Join(" + ", theirs.Select(x => x.name)) + "). " : "";
                 Widgets.Label(new Rect(224f, y, view.width - 224f - 200f, 40f), order + review);
                 GUI.color = Color.white;
-                if (pos > 0)
+                if (pos > 0 && !t.IsDefault(title))
                 {
                     Rect mf = new Rect(view.width - 190f, y + 6f, 92f, 26f);
                     if (Widgets.ButtonText(mf, "Make first")) MakeFirst(t, title, p);

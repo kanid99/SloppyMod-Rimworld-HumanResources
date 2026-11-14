@@ -91,17 +91,52 @@ namespace SloppyHR
             return null;
         }
 
-        // The titles a colonist holds, in order.
-        public List<JobTitle> TitlesFor(Pawn p)
+        // The default title: held by every colonist automatically, always below the titles given to them by hand.
+        public int defaultTitleId = -1;
+        public HashSet<int> noDefault = new HashSet<int>();          // colonists the default was switched off for
+        public HashSet<int> defaultApplied = new HashSet<int>();     // colonists whose priorities were already set from it
+        List<int> noDefaultList, defaultAppliedList;
+
+        public JobTitle DefaultTitle => defaultTitleId < 0 ? null : ById(defaultTitleId);
+        public bool IsDefault(JobTitle title) => title != null && title.id == defaultTitleId;
+        public bool DefaultAppliesTo(Pawn p) =>
+            p != null && defaultTitleId >= 0 && !noDefault.Contains(p.thingIDNumber) && p.Faction == Faction.OfPlayer && p.workSettings != null && p.workSettings.EverWork;
+
+        // The titles given to a colonist by hand, in order (without the default).
+        public List<JobTitle> OwnTitlesFor(Pawn p)
         {
             var list = new List<JobTitle>();
             if (p == null || !titleOf.TryGetValue(p.thingIDNumber, out List<int> ids)) return list;
-            foreach (int id in ids) { JobTitle jt = ById(id); if (jt != null) list.Add(jt); }
+            foreach (int id in ids) { JobTitle jt = ById(id); if (jt != null && jt.id != defaultTitleId) list.Add(jt); }
             return list;
         }
 
-        public bool HasTitle(Pawn p, JobTitle title) => p != null && title != null && titleOf.TryGetValue(p.thingIDNumber, out List<int> ids) && ids.Contains(title.id);
+        // The titles a colonist holds, in order. The default title, if there is one, is always last.
+        public List<JobTitle> TitlesFor(Pawn p)
+        {
+            List<JobTitle> list = OwnTitlesFor(p);
+            if (DefaultAppliesTo(p)) { JobTitle d = DefaultTitle; if (d != null) list.Add(d); }
+            return list;
+        }
+
+        public bool HasTitle(Pawn p, JobTitle title) =>
+            p != null && title != null && (IsDefault(title) ? DefaultAppliesTo(p) : titleOf.TryGetValue(p.thingIDNumber, out List<int> ids) && ids.Contains(title.id));
         public int TitleCount(Pawn p) => TitlesFor(p).Count;
+
+        // Makes a title the default for everyone (null = no default). The caller re-applies priorities.
+        public void SetDefault(JobTitle title)
+        {
+            defaultTitleId = title?.id ?? -1;
+            noDefault.Clear();
+            defaultApplied.Clear();
+            if (title != null)
+                foreach (int pid in titleOf.Keys.ToList())
+                {
+                    titleOf[pid].Remove(title.id);      // it now sits below everything, for everyone
+                    if (titleOf[pid].Count == 0) titleOf.Remove(pid);
+                }
+            TitlesChanged();
+        }
 
         // What a colonist's titles add up to: the title itself when they hold one, otherwise a merged title
         // named "A + B". Null when they hold none.
@@ -109,7 +144,7 @@ namespace SloppyHR
         // work is there a conflict, and then the title higher in the colonist's list wins.
         public JobTitle TitleFor(Pawn p)
         {
-            if (p == null || !titleOf.ContainsKey(p.thingIDNumber)) return null;
+            if (p == null) return null;
             if (mergedCache.TryGetValue(p.thingIDNumber, out JobTitle cached)) return cached;
             List<JobTitle> list = TitlesFor(p);
             JobTitle result = null;
@@ -121,7 +156,7 @@ namespace SloppyHR
                     foreach (var kv in list[i].prio)
                         if (kv.Value > 0 && !result.prio.ContainsKey(kv.Key)) result.prio[kv.Key] = kv.Value;
             }
-            mergedCache[p.thingIDNumber] = result;
+            if (result != null) mergedCache[p.thingIDNumber] = result;      // "none" isn't cached: a newcomer may come under the default title at any time
             return result;
         }
 
@@ -154,8 +189,9 @@ namespace SloppyHR
         public bool AddTitle(Pawn p, JobTitle title)
         {
             if (p == null || title == null) return false;
+            if (IsDefault(title)) { noDefault.Remove(p.thingIDNumber); TitlesChanged(); return true; }
             if (!titleOf.TryGetValue(p.thingIDNumber, out List<int> ids)) titleOf[p.thingIDNumber] = ids = new List<int>();
-            ids.RemoveAll(id => ById(id) == null);
+            ids.RemoveAll(id => ById(id) == null || id == defaultTitleId);
             if (ids.Contains(title.id)) return true;
             if (ids.Count >= MaxTitles) return false;
             ids.Add(title.id);
@@ -166,27 +202,38 @@ namespace SloppyHR
         public void SetOnlyTitle(Pawn p, JobTitle title)
         {
             if (p == null || title == null) return;
-            titleOf[p.thingIDNumber] = new List<int> { title.id };
+            if (IsDefault(title)) { titleOf.Remove(p.thingIDNumber); noDefault.Remove(p.thingIDNumber); }
+            else titleOf[p.thingIDNumber] = new List<int> { title.id };
             TitlesChanged();
         }
 
         public void RemoveTitle(Pawn p, JobTitle title)
         {
-            if (p == null || title == null || !titleOf.TryGetValue(p.thingIDNumber, out List<int> ids)) return;
-            ids.Remove(title.id);
-            if (ids.Count == 0) { titleOf.Remove(p.thingIDNumber); overrides.Remove(p.thingIDNumber); }
+            if (p == null || title == null) return;
+            if (IsDefault(title)) noDefault.Add(p.thingIDNumber);       // switch the default off for this colonist
+            else if (titleOf.TryGetValue(p.thingIDNumber, out List<int> ids))
+            {
+                ids.Remove(title.id);
+                if (ids.Count == 0) titleOf.Remove(p.thingIDNumber);
+            }
             TitlesChanged();
+            if (TitlesFor(p).Count == 0) overrides.Remove(p.thingIDNumber);
         }
 
         public void ClearTitles(Pawn p)
         {
-            if (p != null) { titleOf.Remove(p.thingIDNumber); overrides.Remove(p.thingIDNumber); }
+            if (p != null)
+            {
+                titleOf.Remove(p.thingIDNumber);
+                overrides.Remove(p.thingIDNumber);
+                if (defaultTitleId >= 0) noDefault.Add(p.thingIDNumber);
+            }
             TitlesChanged();
         }
 
         public void MakeFirst(Pawn p, JobTitle title)
         {
-            if (p == null || title == null || !titleOf.TryGetValue(p.thingIDNumber, out List<int> ids) || !ids.Remove(title.id)) return;
+            if (p == null || title == null || IsDefault(title) || !titleOf.TryGetValue(p.thingIDNumber, out List<int> ids) || !ids.Remove(title.id)) return;
             ids.Insert(0, title.id);
             TitlesChanged();
         }
@@ -197,8 +244,9 @@ namespace SloppyHR
             foreach (int pid in titleOf.Keys.ToList())
             {
                 titleOf[pid].Remove(title.id);
-                if (titleOf[pid].Count == 0) { titleOf.Remove(pid); overrides.Remove(pid); }
+                if (titleOf[pid].Count == 0) titleOf.Remove(pid);
             }
+            if (IsDefault(title)) { defaultTitleId = -1; noDefault.Clear(); defaultApplied.Clear(); }
             TitlesChanged();
         }
 
@@ -349,6 +397,15 @@ namespace SloppyHR
             Scribe_Values.Look(ref restUnused, "restUnused", false);
             Scribe_Values.Look(ref lastReviewDay, "lastReviewDay", -1);
             Scribe_Values.Look(ref nextTitleId, "nextTitleId", 1);
+            Scribe_Values.Look(ref defaultTitleId, "defaultTitleId", -1);
+            if (Scribe.mode == LoadSaveMode.Saving) { noDefaultList = noDefault.ToList(); defaultAppliedList = defaultApplied.ToList(); }
+            Scribe_Collections.Look(ref noDefaultList, "noDefaultTitle", LookMode.Value);
+            Scribe_Collections.Look(ref defaultAppliedList, "defaultTitleApplied", LookMode.Value);
+            if (Scribe.mode == LoadSaveMode.LoadingVars)
+            {
+                noDefault = noDefaultList != null ? new HashSet<int>(noDefaultList) : new HashSet<int>();
+                defaultApplied = defaultAppliedList != null ? new HashSet<int>(defaultAppliedList) : new HashSet<int>();
+            }
             Scribe_Collections.Look(ref titles, "titles", LookMode.Deep);
             if (Scribe.mode == LoadSaveMode.Saving) titleOfPacked = titleOf.Where(kv => kv.Value.Count > 0).Select(kv => kv.Key + ";" + string.Join(",", kv.Value)).ToList();
             Scribe_Collections.Look(ref titleOfPacked, "titleOf", LookMode.Value);

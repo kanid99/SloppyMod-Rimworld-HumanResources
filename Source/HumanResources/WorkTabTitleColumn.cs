@@ -75,22 +75,24 @@ namespace SloppyHR
             {
                 var opts = new List<FloatMenuOption>();
                 List<JobTitle> held = t.TitlesFor(pawn);
+                int own = t.OwnTitlesFor(pawn).Count;       // the default title is extra and always last
                 foreach (JobTitle jt in t.TitlesSorted)
                 {
                     JobTitle pick = jt;
                     if (held.Contains(pick)) continue;
-                    if (held.Count == 0) opts.Add(new FloatMenuOption("Give title: " + pick.name, () => JobTitles.Assign(t, pick, pawn)));
-                    else if (held.Count < TimeUseTracker.MaxTitles) opts.Add(new FloatMenuOption("Add as title " + (held.Count + 1) + ": " + pick.name, () => JobTitles.Add(t, pick, pawn)));
+                    if (t.IsDefault(pick)) opts.Add(new FloatMenuOption("Use the default title: " + pick.name, () => JobTitles.Add(t, pick, pawn)));
+                    else if (held.Count == 0) opts.Add(new FloatMenuOption("Give title: " + pick.name, () => JobTitles.Assign(t, pick, pawn)));
+                    else if (own < TimeUseTracker.MaxTitles) opts.Add(new FloatMenuOption("Add as title " + (own + 1) + ": " + pick.name, () => JobTitles.Add(t, pick, pawn)));
                 }
                 if (held.Count > 0)
                     foreach (JobTitle jt in t.TitlesSorted)
                     {
                         JobTitle pick = jt;
-                        if (held.Count == 1 && held[0] == pick) continue;
+                        if (t.IsDefault(pick) || (own == 1 && held[0] == pick)) continue;
                         opts.Add(new FloatMenuOption("Replace with only: " + pick.name, () => JobTitles.Assign(t, pick, pawn)));
                     }
-                for (int i = 1; i < held.Count; i++) { JobTitle pick = held[i]; opts.Add(new FloatMenuOption("Make first: " + pick.name, () => JobTitles.MakeFirst(t, pick, pawn))); }
-                if (held.Count > 1) foreach (JobTitle jt in held) { JobTitle pick = jt; opts.Add(new FloatMenuOption("Remove: " + pick.name, () => JobTitles.Remove(t, pick, pawn))); }
+                for (int i = 1; i < own; i++) { JobTitle pick = held[i]; opts.Add(new FloatMenuOption("Make first: " + pick.name, () => JobTitles.MakeFirst(t, pick, pawn))); }
+                if (held.Count > 1) foreach (JobTitle jt in held) { JobTitle pick = jt; opts.Add(new FloatMenuOption((t.IsDefault(pick) ? "Switch off the default: " : "Remove: ") + pick.name, () => JobTitles.Remove(t, pick, pawn))); }
                 if (held.Count > 0) opts.Add(new FloatMenuOption(held.Count > 1 ? "Remove all titles (priorities stay as they are)" : "Remove title (priorities stay as they are)", () => JobTitles.ClearAll(t, pawn)));
                 if (opts.Count == 0) opts.Add(new FloatMenuOption("No job titles yet. Make one on the HR tab, Job titles page.", null));
                 Find.WindowStack.Add(new FloatMenu(opts));
