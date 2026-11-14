@@ -264,15 +264,16 @@ namespace SloppyHR
                 Vector2 pivot = new Vector2(cx + 12f, top + HeaderH - 4f);
                 Matrix4x4 old = GUI.matrix;
                 UI.RotateAroundPivot(-50f, pivot);
-                GUI.color = !on ? new Color(1f, 1f, 1f, 0.25f) : pr == 0 ? new Color(1f, 1f, 1f, 0.45f) : unskilled ? new Color(0.85f, 0.80f, 0.60f) : Color.white;
+                GUI.color = !on ? new Color(1f, 1f, 1f, 0.16f) : pr == 0 ? new Color(1f, 1f, 1f, 0.45f) : unskilled ? new Color(0.85f, 0.80f, 0.60f) : Color.white;
                 Widgets.Label(new Rect(pivot.x, pivot.y - 11f, 110f, 22f), wt.labelShort.CapitalizeFirst() + (JobAdvisor.IsFixed(wt) ? " *" : ""));
                 GUI.matrix = old;
                 Text.WordWrap = true;
 
                 // the box
-                GUI.color = on ? Color.white : new Color(1f, 1f, 1f, 0.25f);
-                if (pawn != null && on && !DrawVanillaBackground(box, pawn, wt)) GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
-                else if (pawn == null || !on) GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
+                // work the colonist can't do has no box at all, as on the Work tab
+                GUI.color = Color.white;
+                if (!on) { }
+                else if (pawn == null || !DrawVanillaBackground(box, pawn, wt)) GUI.DrawTexture(box, WidgetsWork.WorkBoxBGTex_Mid);
                 GUI.color = Color.white;
                 if (pawn != null && on && !wt.relevantSkills.NullOrEmpty())
                 {
@@ -312,7 +313,7 @@ namespace SloppyHR
                     }
                     TooltipHandler.TipRegion(box, wt.gerundLabel.CapitalizeFirst() + (unskilled ? " (unskilled)" : "")
                         + "\n" + wt.defName + ", from " + (wt.modContentPack?.Name ?? "unknown")
-                        + (!on ? "\n\nThis colonist can't do this work." : "") + (extra.NullOrEmpty() ? "" : "\n\n" + extra));
+                        + (!on ? "\n\n" + CantDoText(pawn, wt) : "") + (extra.NullOrEmpty() ? "" : "\n\n" + extra));
                     if (on && click != null && Event.current.type == EventType.MouseDown)
                     {
                         int button = Event.current.button;
@@ -322,6 +323,18 @@ namespace SloppyHR
                 }
             }
             return strips * stripH;
+        }
+
+        static string CantDoText(Pawn pawn, WorkTypeDef wt)
+        {
+            string text = (pawn != null ? pawn.LabelShortCap : "This colonist") + " can't do this work.";
+            try
+            {
+                List<string> reasons = pawn?.GetReasonsForDisabledWorkType(wt);
+                if (!reasons.NullOrEmpty()) text += " Reason: " + string.Join(", ", reasons) + ".";
+            }
+            catch { }
+            return text + "\nAny title that sets it is ignored for them.";
         }
 
         // The Work tab's own box background: shaded by skill, with the passion flame (and whatever other mods add to it).
@@ -522,7 +535,7 @@ namespace SloppyHR
             Text.Font = GameFont.Tiny;
             Widgets.Label(new Rect(right.x, y, right.width - 200f, 20f), held.Count == 0
                 ? "CURRENT WORK PRIORITIES   the same as the Work tab."
-                : "WORK PRIORITIES THE GAME USES   boxes are shaded by skill as on the Work tab, with the skill level underneath (* = passion). The bar shows which title a box comes from; a white frame is a box you set by hand.");
+                : "WORK PRIORITIES THE GAME USES   boxes are shaded by skill as on the Work tab, with the skill level underneath (* = passion). No box means they can't do that work. The bar shows which title a box comes from; a white frame is a box you set by hand.");
             GUI.color = Color.white;
             int handCount = hand?.Count ?? 0;
             if (handCount > 0)
