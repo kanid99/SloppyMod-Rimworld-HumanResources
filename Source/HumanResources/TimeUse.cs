@@ -76,6 +76,7 @@ namespace SloppyHR
         public List<JobTitle> titles = new List<JobTitle>();
         // A colonist can hold up to MaxTitles titles, in order: the first is their main job.
         public const int MaxTitles = 3;
+        public bool reappliedThisLoad;       // not saved
         public Dictionary<int, List<int>> titleOf = new Dictionary<int, List<int>>();     // pawn id -> title ids, in order
         public int nextTitleId = 1;
         List<string> titleOfPacked;
@@ -101,8 +102,9 @@ namespace SloppyHR
 
         // What a colonist's titles add up to: the title itself when they hold one, otherwise a merged title
         // named "A + B". Null when they hold none.
-        // Merge rule: the first title is used as written, the second is pushed down one step (1 becomes 2), the
-        // third two steps, never below 4; each kind of work then takes the best number any title gives it.
+        // Merge rule: a title is used as written unless its top priority would tie with or beat the top priority of
+        // the title above it; then all of its numbers are pushed down just far enough to sit below (never past 4).
+        // Each kind of work then takes the best number any title gives it.
         public JobTitle TitleFor(Pawn p)
         {
             if (p == null || !titleOf.ContainsKey(p.thingIDNumber)) return null;
@@ -113,11 +115,12 @@ namespace SloppyHR
             else if (list.Count > 1)
             {
                 result = new JobTitle { id = -1, name = string.Join(" + ", list.Select(x => x.name)) };
+                List<int> shifts = TitleShifts(list);
                 for (int i = 0; i < list.Count; i++)
                     foreach (var kv in list[i].prio)
                     {
                         if (kv.Value <= 0) continue;
-                        int pushed = Math.Min(4, kv.Value + i);
+                        int pushed = Math.Min(4, kv.Value + shifts[i]);
                         if (!result.prio.TryGetValue(kv.Key, out int have) || pushed < have) result.prio[kv.Key] = pushed;
                     }
             }
@@ -147,6 +150,23 @@ namespace SloppyHR
         }
 
         public void ClearOverrides(Pawn p) { if (p != null) overrides.Remove(p.thingIDNumber); }
+
+        // How many steps each title in an ordered list is pushed down when merged (see TitleFor).
+        public static List<int> TitleShifts(List<JobTitle> list)
+        {
+            var shifts = new List<int>();
+            int aboveTop = 0;       // the top priority, after pushing, of the title above
+            foreach (JobTitle jt in list)
+            {
+                int top = 0;
+                foreach (var kv in jt.prio) if (kv.Value > 0 && (top == 0 || kv.Value < top)) top = kv.Value;
+                if (top == 0) { shifts.Add(0); continue; }      // an empty title
+                int shift = Math.Max(0, aboveTop + 1 - top);
+                shifts.Add(shift);
+                aboveTop = Math.Min(4, top + shift);
+            }
+            return shifts;
+        }
 
         // Call after anything about titles changes (assignments, a title's priorities or its name).
         public void TitlesChanged() => mergedCache.Clear();
@@ -475,6 +495,15 @@ namespace SloppyHR
         {
             base.PreOpen();
             cacheStamp = -1;
+            HrSelection.Opened();
+            // once per loaded game: bring every title holder's priorities in line with the current merge rule
+            TimeUseTracker tr = TimeUseTracker.Instance;
+            if (tr != null && !tr.reappliedThisLoad)
+            {
+                tr.reappliedThisLoad = true;
+                try { foreach (Pawn p in JobAdvisor.Pawns) if (tr.TitleCount(p) > 1) JobTitles.Reapply(tr, p); }
+                catch (Exception e) { Log.Warning(HR.Tag + "could not re-apply merged titles: " + e.Message); }
+            }
         }
 
         // ---- labels and colours ----
@@ -634,6 +663,7 @@ namespace SloppyHR
 
         public override void DoWindowContents(Rect inRect)
         {
+            HrSelection.Sync();
             Text.Font = GameFont.Small;
             string[] pages = { "Time use", "Job advisor", "Workload", "Job titles" };
             for (int i = 0; i < pages.Length; i++)
@@ -732,6 +762,11 @@ namespace SloppyHR
             const float rowH = 26f, nameOnlyW = 140f, skillW = 120f, nameW = nameOnlyW + skillW, hoursW = 56f;
             Rect outRect = new Rect(inRect.x, y, inRect.width, inRect.yMax - y);
             Rect viewRect = new Rect(0f, 0f, outRect.width - 16f, rows.Count * rowH);
+            if (HrSelection.TakeScroll(0))
+            {
+                int at = rows.FindIndex(r => r.pawn != null && r.pawn.thingIDNumber == HrSelection.PawnId);
+                if (at >= 0) scroll.y = Mathf.Clamp(at * rowH - outRect.height / 2f + rowH, 0f, Mathf.Max(0f, viewRect.height - outRect.height));
+            }
             Widgets.BeginScrollView(outRect, ref scroll, viewRect);
             float barW = viewRect.width - nameW - hoursW - 8f;
             for (int i = 0; i < rows.Count; i++)
@@ -741,6 +776,7 @@ namespace SloppyHR
                 Row row = rows[i];
                 Rect full = new Rect(0f, ry, viewRect.width, rowH);
                 if (i % 2 == 1) Widgets.DrawLightHighlight(full);
+                if (row.pawn != null && row.pawn.thingIDNumber == HrSelection.PawnId) Widgets.DrawHighlightSelected(full);
 
                 Rect nameRect = new Rect(4f, ry, nameOnlyW - 4f, rowH);
                 if (row.bestSkill != null)
@@ -807,6 +843,40 @@ namespace SloppyHR
             Widgets.EndScrollView();
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
+        }
+    }
+
+    // The colonist the HR pages are focused on. It follows the colonist selected in the game, so whoever you have
+    // selected when you open HR (or click while it is open) is the one highlighted on every page.
+    public static class HrSelection
+    {
+        public static int PawnId = -1;
+        static Thing lastGameSelection;
+        static readonly bool[] scrollPending = new bool[3];     // 0 time use, 1 job advisor, 2 colonists list
+
+        public static void Opened() { lastGameSelection = null; }
+
+        public static void Sync()
+        {
+            Thing sel = Find.Selector?.SingleSelectedThing;
+            if (sel == lastGameSelection) return;
+            lastGameSelection = sel;
+            if (sel is Pawn p && p.IsColonist) Set(p.thingIDNumber);
+        }
+
+        public static void Set(int id)
+        {
+            if (id == PawnId) return;
+            PawnId = id;
+            for (int i = 0; i < scrollPending.Length; i++) scrollPending[i] = true;
+        }
+
+        // True once per selection change for each page, so the page can scroll its list to the colonist.
+        public static bool TakeScroll(int page)
+        {
+            bool was = scrollPending[page];
+            scrollPending[page] = false;
+            return was && PawnId >= 0;
         }
     }
 }

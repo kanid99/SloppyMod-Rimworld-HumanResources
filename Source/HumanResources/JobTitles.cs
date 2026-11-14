@@ -308,7 +308,6 @@ namespace SloppyHR
         const int FilterAll = -2, FilterNone = -1;
         static int filterTitleId = FilterAll;      // colonist list filter: everyone, no title, or a title id
         static int mode;                    // 0 = titles, 1 = colonists
-        static int selectedPawnId = -1;
         static int dragFrom = -1;
         static Vector2 pawnScroll;
 
@@ -339,12 +338,17 @@ namespace SloppyHR
             List<Pawn> sorted = pawns.Where(p => filterTitleId == FilterAll || (filterTitleId == FilterNone ? t.TitleFor(p) == null : t.HasTitle(p, filterTitle)))
                 .OrderBy(p => p.LabelShortCap).ToList();
             Rect listView = new Rect(0f, 0f, left.width - 16f, sorted.Count * 38f);
+            if (HrSelection.TakeScroll(2))
+            {
+                int at = sorted.FindIndex(p => p.thingIDNumber == HrSelection.PawnId);
+                if (at >= 0) pawnScroll.y = Mathf.Clamp(at * 38f - left.height / 2f + 38f, 0f, Mathf.Max(0f, listView.height - left.height));
+            }
             Widgets.BeginScrollView(left, ref pawnScroll, listView);
             for (int i = 0; i < sorted.Count; i++)
             {
                 Pawn p = sorted[i];
                 Rect r = new Rect(0f, i * 38f, listView.width, 36f);
-                if (p.thingIDNumber == selectedPawnId) Widgets.DrawHighlightSelected(r);
+                if (p.thingIDNumber == HrSelection.PawnId) Widgets.DrawHighlightSelected(r);
                 else Widgets.DrawHighlightIfMouseover(r);
                 Text.Font = GameFont.Small;
                 Text.WordWrap = false;
@@ -355,7 +359,7 @@ namespace SloppyHR
                 Widgets.Label(new Rect(6f, r.y + 18f, r.width - 8f, 18f), m == null ? "no title" : m.name.Truncate(r.width - 8f));
                 GUI.color = Color.white;
                 Text.WordWrap = true;
-                if (Widgets.ButtonInvisible(r)) { selectedPawnId = p.thingIDNumber; dragFrom = -1; }
+                if (Widgets.ButtonInvisible(r)) { HrSelection.Set(p.thingIDNumber); HrSelection.TakeScroll(2); dragFrom = -1; }
             }
             Widgets.EndScrollView();
             Text.Font = GameFont.Small;
@@ -369,7 +373,7 @@ namespace SloppyHR
             }
 
             Rect right = new Rect(left.xMax + 14f, inRect.y, inRect.width - left.width - 14f, inRect.height);
-            Pawn pawn = pawns.FirstOrDefault(p => p.thingIDNumber == selectedPawnId);
+            Pawn pawn = pawns.FirstOrDefault(p => p.thingIDNumber == HrSelection.PawnId);
             if (pawn == null)
             {
                 GUI.color = Color.gray;
@@ -382,6 +386,7 @@ namespace SloppyHR
 
             float y = right.y;
             List<JobTitle> held = t.TitlesFor(pawn);
+            List<int> shifts = TimeUseTracker.TitleShifts(held);
             Dictionary<string, int> hand = t.OverridesFor(pawn);
 
             // header
@@ -406,7 +411,7 @@ namespace SloppyHR
             // titles in order
             GUI.color = Color.gray;
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row, or use the arrows, to change the order. The first is used as written; the second is pushed down one step and the third two.");
+            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row, or use the arrows, to change the order. A title is used as written unless its top priority would tie with or beat the title above it; then it is pushed down just enough to sit below.");
             GUI.color = Color.white;
             y += 22f;
             if (held.Count == 0)
@@ -430,7 +435,7 @@ namespace SloppyHR
                 Widgets.Label(new Rect(row.x + 40f, row.y, row.width - 260f, 30f), jt.name);
                 GUI.color = Color.gray;
                 Text.Font = GameFont.Tiny;
-                Widgets.Label(new Rect(row.xMax - 216f, row.y, 90f, 30f), i == 0 ? "as written" : i == 1 ? "down 1 step" : "down 2 steps");
+                Widgets.Label(new Rect(row.xMax - 216f, row.y, 90f, 30f), shifts[i] == 0 ? "as written" : shifts[i] == 1 ? "down 1 step" : "down " + shifts[i] + " steps");
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
                 bool acted = false;
@@ -474,7 +479,7 @@ namespace SloppyHR
                     if (merged == null || (hand != null && hand.ContainsKey(wt.defName))) return (Color?)null;
                     int v = merged.Get(wt);
                     if (v == 0) return null;
-                    for (int i = 0; i < held.Count; i++) { int pr = held[i].Get(wt); if (pr > 0 && Math.Min(4, pr + i) == v) return SourceColors[i % SourceColors.Length]; }
+                    for (int i = 0; i < held.Count; i++) { int pr = held[i].Get(wt); if (pr > 0 && Math.Min(4, pr + shifts[i]) == v) return SourceColors[i % SourceColors.Length]; }
                     return null;
                 },
                 wt => hand != null && hand.ContainsKey(wt.defName),
@@ -489,7 +494,7 @@ namespace SloppyHR
                     if (merged == null) return null;
                     if (hand != null && hand.TryGetValue(wt.defName, out int h)) return "Set by hand to " + (h == 0 ? "off" : h.ToString()) + ". The titles say " + (merged.Get(wt) == 0 ? "off" : merged.Get(wt).ToString()) + ".";
                     var parts = new List<string>();
-                    for (int i = 0; i < held.Count; i++) { int pr = held[i].Get(wt); if (pr > 0) parts.Add(held[i].name + ": " + pr + (i > 0 ? " (counts as " + Math.Min(4, pr + i) + ")" : "")); }
+                    for (int i = 0; i < held.Count; i++) { int pr = held[i].Get(wt); if (pr > 0) parts.Add(held[i].name + ": " + pr + (shifts[i] > 0 ? " (counts as " + Math.Min(4, pr + shifts[i]) + ")" : "")); }
                     return parts.Count == 0 ? "None of their titles include this work." : string.Join("\n", parts);
                 });
             y += 6f;
@@ -694,7 +699,7 @@ namespace SloppyHR
             Widgets.Label(new Rect(0f, y, 300f, 28f), "Holds this title (" + holders.Count + ")");
             GUI.color = Color.gray;
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(300f, y, view.width - 460f, 28f), "A colonist can hold up to 3 titles. The first is used as written; the second is pushed down one step and the third two.");
+            Widgets.Label(new Rect(300f, y, view.width - 460f, 28f), "A colonist can hold up to 3 titles. A later title is pushed down only if its top priority would tie with or beat the one above it.");
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
             if (Widgets.ButtonText(new Rect(view.width - 150f, y, 150f, 28f), "Assign colonist..."))
@@ -739,7 +744,7 @@ namespace SloppyHR
                 {
                     Rect mf = new Rect(view.width - 190f, y + 6f, 92f, 26f);
                     if (Widgets.ButtonText(mf, "Make first")) MakeFirst(t, title, p);
-                    TooltipHandler.TipRegion(mf, "Make this their main title. Its priorities are then used as written, and their other titles are pushed down a step.");
+                    TooltipHandler.TipRegion(mf, "Make this their main title. Its priorities are then used as written, and their other titles are pushed down only as far as needed to sit below it.");
                 }
                 if (Widgets.ButtonText(new Rect(view.width - 92f, y + 6f, 92f, 26f), "Remove")) Remove(t, title, p);
                 y += 44f;

@@ -856,6 +856,11 @@ namespace SloppyHR
             float tableW = nameW + roleW + cw * types.Count + applyW;
             Rect outRect = new Rect(inRect.x, y, inRect.width, inRect.yMax - y);
             Rect view = new Rect(0f, 0f, Mathf.Max(tableW, outRect.width - 16f), headH + rows.Count * rowH);
+            if (HrSelection.TakeScroll(1))
+            {
+                int at = rows.FindIndex(r => r.pawn != null && r.pawn.thingIDNumber == HrSelection.PawnId);
+                if (at >= 0) scroll.y = Mathf.Clamp(at * rowH - (outRect.height - headH) / 2f + rowH, 0f, Mathf.Max(0f, view.height - outRect.height));
+            }
             Widgets.BeginScrollView(outRect, ref scroll, view);
 
             Text.WordWrap = false;
@@ -865,6 +870,7 @@ namespace SloppyHR
                 if (ry + rowH < scroll.y + headH || ry > scroll.y + outRect.height) continue;
                 PRow row = rows[i];
                 if (i % 2 == 1) Widgets.DrawLightHighlight(new Rect(0f, ry, view.width, rowH));
+                if (row.pawn.thingIDNumber == HrSelection.PawnId) Widgets.DrawHighlightSelected(new Rect(0f, ry, view.width, rowH));
 
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.MiddleLeft;
