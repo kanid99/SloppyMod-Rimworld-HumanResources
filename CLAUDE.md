@@ -25,3 +25,12 @@ Same rules as the other SloppyMods repositories:
 - `PrototypeMigration` (in `HumanResourcesMod.cs`) carries data over from the prototype that lived in a
   private compat mod under the namespace `Harmony3Compat`. Keep it until no saves from that prototype remain.
 - Nothing here has automated tests. Say plainly when a change compiles but has not been run in game.
+
+## Steam Workshop page
+
+- `Workshop/description.bbcode` is the Workshop page description, kept here for safe keeping. Steam's limit is
+  8,000 characters. Its images are loaded from this repository's `main` branch, so the repository must be
+  public for them to show.
+- The banners, tiles, `About/Preview.png` and `About/ModIcon.png` are drawn by
+  `python3 Source/Art/make_workshop.py <folder with the Archivo .ttf files>`. Change the text there and re-run;
+  don't edit the PNGs by hand. Update the description and tiles when a feature they describe changes.

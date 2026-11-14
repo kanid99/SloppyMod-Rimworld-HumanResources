@@ -3,12 +3,12 @@
   <name>SloppyMods - Human Resources</name>
   <author>SloppyMod</author>
   <packageId>sloppymod.humanresources</packageId>
-  <modVersion>0.9.5</modVersion>
+  <modVersion>0.9.6</modVersion>
   <!-- 1.7 on the Waylith engine only: the assembly is built against Waylith's .NET 10 game assemblies. -->
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
-  <description>Build 0.9.5
+  <description>Build 0.9.6
 
 An HR manager for your colony. Adds an HR button to the bottom bar with four pages:
 
