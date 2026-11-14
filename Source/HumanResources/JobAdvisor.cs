@@ -38,6 +38,12 @@ namespace SloppyHR
             public bool reviewConcern, reviewDone;
         }
 
+        // Work that lists a skill but doesn't train or use it: Complex Jobs' Nurse is feeding, carrying and visiting
+        // patients, none of which is Medicine work. It is treated as unskilled, and kept off colonists with a medical role.
+        static readonly HashSet<string> CareTypes = new HashSet<string> { "FSFNurse" };
+        static readonly HashSet<string> MedicalRoleTypes = new HashSet<string> { "Doctor", "FSFSurgeon" };
+        static bool NoSkill(WorkTypeDef wt) => wt.relevantSkills.NullOrEmpty() || CareTypes.Contains(wt.defName);
+
         static readonly HashSet<string> FixedTypes = new HashSet<string> { "Firefighter", "Patient", "PatientBedRest", "FSFRescue", "FSFSelfTend" };
         static List<WorkTypeDef> types = new List<WorkTypeDef>();
         static List<PRow> rows = new List<PRow>();
@@ -322,7 +328,7 @@ namespace SloppyHR
                         Cell c = new Cell { wt = wt, disabled = p.WorkTypeIsDisabled(wt) };
                         c.cur = c.disabled ? 0 : p.workSettings.GetPriority(wt);
                         c.fixedType = FixedTypes.Contains(wt.defName);
-                        c.skilled = !c.fixedType && wt.relevantSkills != null && wt.relevantSkills.Count > 0;
+                        c.skilled = !c.fixedType && !NoSkill(wt);
                         c.title = row.titleName;
                         c.kept = row.titleName != null || kept.Contains(Key(p, wt));     // title holders are never changed by the advisor
                         if (c.skilled && !c.disabled)
@@ -419,7 +425,7 @@ namespace SloppyHR
             {
                 for (int t = 0; t < types.Count; t++)
                 {
-                    if (types[t].relevantSkills.NullOrEmpty() || FixedTypes.Contains(types[t].defName)) continue;
+                    if (NoSkill(types[t]) || FixedTypes.Contains(types[t].defName)) continue;
                     float h = (float)tracker.ColonyTicks("wt:" + types[t].defName, 24) / GenDate.TicksPerHour;
                     dayHours[types[t]] = h;
                     slots[types[t]] = Mathf.Max(1, Mathf.CeilToInt(h / HoursPerWorker)) + (Workload.Level(types[t].defName) >= 3 ? 1 : 0);
@@ -462,7 +468,7 @@ namespace SloppyHR
             for (int t = 0; t < types.Count; t++)
             {
                 int lvl = Workload.Level(types[t].defName);
-                if (lvl < 3 || types[t].relevantSkills.NullOrEmpty() || FixedTypes.Contains(types[t].defName)) continue;
+                if (lvl < 3 || NoSkill(types[t]) || FixedTypes.Contains(types[t].defName)) continue;
                 if (Workload.Unattended(types[t].defName))
                 {
                     float Idle(PRow r) => Mathf.Max(0f, tracker?.Share(r.pawn, "idle", 24) ?? 0f);
@@ -561,7 +567,7 @@ namespace SloppyHR
             // falling behind). Who covers which job moves along by one each day.
             var rotation = new Dictionary<PRow, WorkTypeDef>();
             List<int> neglected = Enumerable.Range(0, types.Count)
-                .Where(t => !FixedTypes.Contains(types[t].defName) && types[t].relevantSkills.NullOrEmpty()
+                .Where(t => !FixedTypes.Contains(types[t].defName) && NoSkill(types[t])
                             && Workload.Level(types[t].defName) >= 2 && (tracker == null || !tracker.IsResting(types[t].defName)))
                 .OrderByDescending(t => Workload.Level(types[t].defName)).ToList();
             if (neglected.Count > 0)
@@ -599,10 +605,20 @@ namespace SloppyHR
                 }
             }
 
+            // care work stays off colonists with a medical role, as long as somebody else is free to do it
+            var careCovered = new HashSet<WorkTypeDef>();
+            foreach (PRow row in rows)
+            {
+                if (row.cells.Any(c => c.role && MedicalRoleTypes.Contains(c.wt.defName))) continue;
+                foreach (Cell c in row.cells)
+                    if (CareTypes.Contains(c.wt.defName) && !c.disabled && !(c.kept && c.cur == 0)) careCovered.Add(c.wt);
+            }
+
             foreach (PRow row in rows)
             {
                 float idle = tracker != null ? tracker.Share(row.pawn, "idle", 24) : -1f;
                 rotation.TryGetValue(row, out WorkTypeDef rotType);
+                bool medic = row.cells.Any(c => c.role && MedicalRoleTypes.Contains(c.wt.defName));
                 JobTitle jobTitle = tracker?.TitleFor(row.pawn);
                 // unskilled work goes to the lowest worker-quality scores first
                 int unskilled = row.support || tier[row] == 0 ? 2 : tier[row] == 1 ? 3 : idle >= 0.2f ? 3 : 4;
@@ -610,7 +626,12 @@ namespace SloppyHR
                 {
                     if (c.disabled) { c.sug = 0; continue; }
                     if (c.fixedType) c.sug = c.cur;
-                    else if (!c.skilled) { c.rotation = rotType == c.wt; c.sug = c.rotation ? 1 : unskilled; }
+                    else if (!c.skilled)
+                    {
+                        c.rotation = rotType == c.wt;
+                        c.sug = c.rotation ? 1 : unskilled;
+                        if (medic && !c.rotation && CareTypes.Contains(c.wt.defName) && careCovered.Contains(c.wt)) c.sug = 0;     // doctors treat; others feed and carry
+                    }
                     if (c.kept) c.sug = c.cur;
                     if (tracker != null && tracker.IsResting(c.wt.defName)) { c.resting = true; c.sug = c.cur; }
                 }
@@ -679,7 +700,7 @@ namespace SloppyHR
         public static void Invalidate() => stamp = -1;
         public static List<WorkTypeDef> Types { get { Ensure(); return types; } }
         public static bool IsFixed(WorkTypeDef wt) => FixedTypes.Contains(wt.defName);
-        public static bool IsSkilled(WorkTypeDef wt) => !IsFixed(wt) && !wt.relevantSkills.NullOrEmpty();
+        public static bool IsSkilled(WorkTypeDef wt) => !IsFixed(wt) && !NoSkill(wt);
         public static List<Pawn> Pawns { get { Ensure(); return rows.Select(r => r.pawn).ToList(); } }
         static PRow RowOf(Pawn p) { Ensure(); for (int i = 0; i < rows.Count; i++) if (rows[i].pawn == p) return rows[i]; return null; }
         public static float Score(Pawn p, WorkTypeDef wt)
@@ -958,7 +979,7 @@ namespace SloppyHR
                 string lab = types[t].labelShort.CapitalizeFirst();
                 int max = Mathf.Max(2, Mathf.FloorToInt(cw / 6.5f));
                 Widgets.Label(h, lab.Length > max ? lab.Substring(0, max) : lab);
-                TooltipHandler.TipRegion(h, lab + (slots.TryGetValue(types[t], out int hcap) ? "\nLast day: " + dayHours[types[t]].ToString("0.#") + " colonist-hours, enough for " + hcap + " at priority 1." : "") + (FixedTypes.Contains(types[t].defName) ? "\nLeft alone by the advisor." : types[t].relevantSkills.NullOrEmpty() ? "\nUnskilled work." : "\nSkills: " + string.Join(", ", types[t].relevantSkills.Select(s => s.label))));
+                TooltipHandler.TipRegion(h, lab + (slots.TryGetValue(types[t], out int hcap) ? "\nLast day: " + dayHours[types[t]].ToString("0.#") + " colonist-hours, enough for " + hcap + " at priority 1." : "") + (FixedTypes.Contains(types[t].defName) ? "\nLeft alone by the advisor." : CareTypes.Contains(types[t].defName) ? "\nCare work (feeding, carrying and visiting patients). It doesn't train Medicine, so it is treated as unskilled and kept off colonists with a medical role." : types[t].relevantSkills.NullOrEmpty() ? "\nUnskilled work." : "\nSkills: " + string.Join(", ", types[t].relevantSkills.Select(s => s.label))));
             }
 
             Text.WordWrap = true;
