@@ -411,7 +411,7 @@ namespace SloppyHR
             // titles in order
             GUI.color = Color.gray;
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row, or use the arrows, to change the order. A title is used as written unless its top priority would tie with or beat the title above it; then it is pushed down just enough to sit below.");
+            Widgets.Label(new Rect(right.x, y, right.width, 20f), "TITLES   drag a row up or down to change the order. A title is used as written unless its top priority would tie with or beat the title above it; then it is pushed down just enough to sit below.");
             GUI.color = Color.white;
             y += 22f;
             if (held.Count == 0)
@@ -421,37 +421,55 @@ namespace SloppyHR
                 GUI.color = Color.white;
                 y += 30f;
             }
-            int dropAt = -1;
+            // Drag to reorder: hold the mouse on a row and move it; the rows swap live as the cursor crosses them.
+            float listTop = y;
+            if (dragFrom >= held.Count) dragFrom = -1;
+            if (dragFrom >= 0)
+            {
+                if (!Input.GetMouseButton(0)) dragFrom = -1;        // released (anywhere)
+                else
+                {
+                    int target = Mathf.Clamp(Mathf.FloorToInt((Event.current.mousePosition.y - listTop) / 32f), 0, held.Count - 1);
+                    if (target != dragFrom)
+                    {
+                        MoveTitle(t, pawn, dragFrom, target);
+                        dragFrom = target;
+                        held = t.TitlesFor(pawn);
+                        shifts = TimeUseTracker.TitleShifts(held);
+                    }
+                }
+            }
             for (int i = 0; i < held.Count; i++)
             {
                 JobTitle jt = held[i];
                 Rect row = new Rect(right.x, y, Mathf.Min(right.width, 620f), 30f);
-                Widgets.DrawBoxSolid(row, new Color(1f, 1f, 1f, dragFrom == i ? 0.12f : 0.04f));
+                bool dragging = dragFrom == i;
+                Widgets.DrawBoxSolid(row, new Color(1f, 1f, 1f, dragging ? 0.16f : 0.04f));
                 Widgets.DrawBoxSolid(new Rect(row.x, row.y, 5f, row.height), SourceColors[i % SourceColors.Length]);
-                if (dragFrom >= 0 && dragFrom != i && Mouse.IsOver(row)) { Widgets.DrawHighlightSelected(row); dropAt = i; }
+                if (dragging) Widgets.DrawBox(row, 1);
                 else if (dragFrom < 0) Widgets.DrawHighlightIfMouseover(row);
+                // grip
+                if (held.Count > 1)
+                {
+                    Color grip = new Color(1f, 1f, 1f, dragging ? 0.9f : 0.35f);
+                    for (int g = 0; g < 3; g++) Widgets.DrawBoxSolid(new Rect(row.x + 12f, row.y + 9f + g * 5f, 14f, 2f), grip);
+                }
                 Text.Font = GameFont.Small;
-                Widgets.Label(new Rect(row.x + 14f, row.y, 30f, 30f), (i + 1) + ".");
-                Widgets.Label(new Rect(row.x + 40f, row.y, row.width - 260f, 30f), jt.name);
+                Widgets.Label(new Rect(row.x + 36f, row.y, 30f, 30f), (i + 1) + ".");
+                Widgets.Label(new Rect(row.x + 62f, row.y, row.width - 260f, 30f), jt.name);
                 GUI.color = Color.gray;
                 Text.Font = GameFont.Tiny;
-                Widgets.Label(new Rect(row.xMax - 216f, row.y, 90f, 30f), shifts[i] == 0 ? "as written" : shifts[i] == 1 ? "down 1 step" : "down " + shifts[i] + " steps");
+                Widgets.Label(new Rect(row.xMax - 180f, row.y, 100f, 30f), shifts[i] == 0 ? "as written" : shifts[i] == 1 ? "down 1 step" : "down " + shifts[i] + " steps");
                 GUI.color = Color.white;
                 Text.Font = GameFont.Small;
-                bool acted = false;
-                if (i > 0 && Widgets.ButtonText(new Rect(row.xMax - 124f, row.y + 3f, 24f, 24f), "^")) { MoveTitle(t, pawn, i, i - 1); acted = true; }
-                if (i < held.Count - 1 && Widgets.ButtonText(new Rect(row.xMax - 98f, row.y + 3f, 24f, 24f), "v")) { MoveTitle(t, pawn, i, i + 1); acted = true; }
-                if (Widgets.ButtonText(new Rect(row.xMax - 70f, row.y + 3f, 68f, 24f), "Remove")) { Remove(t, jt, pawn); acted = true; }
-                if (acted) { dragFrom = -1; Text.Anchor = TextAnchor.UpperLeft; return; }
-                Rect grab = new Rect(row.x, row.y, row.width - 130f, row.height);
-                if (held.Count > 1 && Event.current.type == EventType.MouseDown && Event.current.button == 0 && Mouse.IsOver(grab)) { dragFrom = i; Event.current.Use(); }
+                if (dragFrom < 0 && Widgets.ButtonText(new Rect(row.xMax - 70f, row.y + 3f, 68f, 24f), "Remove")) { Remove(t, jt, pawn); Text.Anchor = TextAnchor.UpperLeft; return; }
+                Rect grab = new Rect(row.x, row.y, row.width - 76f, row.height);
+                if (held.Count > 1 && dragFrom < 0 && Mouse.IsOver(grab))
+                {
+                    TooltipHandler.TipRegion(grab, "Hold and drag up or down to change the order.");
+                    if (Event.current.type == EventType.MouseDown && Event.current.button == 0) { dragFrom = i; Event.current.Use(); }
+                }
                 y += 32f;
-            }
-            if (dragFrom >= 0 && Event.current.rawType == EventType.MouseUp)
-            {
-                int from = dragFrom;
-                dragFrom = -1;
-                if (dropAt >= 0 && from < held.Count) { MoveTitle(t, pawn, from, dropAt); Text.Anchor = TextAnchor.UpperLeft; return; }
             }
             y += 8f;
 
