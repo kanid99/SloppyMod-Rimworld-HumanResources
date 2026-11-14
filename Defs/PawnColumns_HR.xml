@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <PawnColumnDef>
+    <defName>SloppyHR_JobTitle</defName>
+    <label>title</label>
+    <headerTip>Job title from the HR tab. Click this header to assign a title to everyone or remove all titles. Click a colonist's title to change or remove it.</headerTip>
+    <workerClass>SloppyHR.PawnColumnWorker_JobTitle</workerClass>
+    <sortable>true</sortable>
+    <width>110</width>
+  </PawnColumnDef>
+</Defs>

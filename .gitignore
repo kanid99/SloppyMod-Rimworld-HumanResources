@@ -1,0 +1,7 @@
+obj/
+bin/
+# Build output, except the one assembly RimWorld loads: RimSort clones this repo
+# straight into the Mods folder, so a clone must carry the DLL (see CLAUDE.md).
+Assemblies/*
+!Assemblies/SloppyHR.dll
+*.user

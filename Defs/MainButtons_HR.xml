@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <MainButtonDef>
+    <defName>SloppyHR_TimeUse</defName>
+    <label>HR</label>
+    <description>Colony HR: how each colonist spends their time, suggested work priorities, and which work is falling behind.</description>
+    <tabWindowClass>SloppyHR.MainTabWindow_TimeUse</tabWindowClass>
+    <order>52</order>
+  </MainButtonDef>
+</Defs>

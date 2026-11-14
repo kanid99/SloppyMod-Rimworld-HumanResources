@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build: dotnet build -c Release -p:GameRefs=<folder containing Assembly-CSharp.dll, UnityStubs.dll, 0Harmony.dll>
+       Those three come from a RimWorld 1.7 (Waylith) install and are not in this repository. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>SloppyHR</AssemblyName>
+    <RootNamespace>SloppyHR</RootNamespace>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>0.9.2</Version>
+    <OutputPath>../../Assemblies/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoWarn>CS1701;CS1702;CS1705</NoWarn>
+    <GameRefs Condition="'$(GameRefs)' == ''">../../../refs</GameRefs>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>$(GameRefs)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(GameRefs)/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityStubs"><HintPath>$(GameRefs)/UnityStubs.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
