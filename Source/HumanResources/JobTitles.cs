@@ -277,13 +277,24 @@ namespace SloppyHR
                 GUI.color = Color.white;
                 if (pawn != null && on && !wt.relevantSkills.NullOrEmpty())
                 {
-                    // skill level under the box, brighter with a passion
+                    // skill level under the box, with the passion's own icon (or * when it has none)
                     float avg = pawn.skills.AverageOfRelevantSkillsFor(wt);
-                    Passion ps = pawn.skills.MaxPassionOfRelevantSkillsFor(wt);
+                    Passion ps = JobAdvisor.BestPassion(pawn, wt, out string passionLabel);
+                    Texture2D passionIcon = ps != Passion.None ? JobAdvisor.PassionIcon(ps) : null;
                     Text.Font = GameFont.Tiny;
-                    Text.Anchor = TextAnchor.UpperCenter;
                     GUI.color = ps != Passion.None ? new Color(1f, 0.82f, 0.35f) : avg >= 8f ? Color.white : new Color(1f, 1f, 1f, 0.55f);
-                    Widgets.Label(new Rect(box.x - 4f, box.yMax + 5f, box.width + 8f, 18f), avg.ToString("0") + (ps != Passion.None ? "*" : ""));
+                    if (passionIcon != null)
+                    {
+                        Text.Anchor = TextAnchor.UpperRight;
+                        Widgets.Label(new Rect(box.x - 6f, box.yMax + 5f, 20f, 18f), avg.ToString("0"));
+                        GUI.color = Color.white;
+                        GUI.DrawTexture(new Rect(box.x + 15f, box.yMax + 6f, 12f, 12f), passionIcon);
+                    }
+                    else
+                    {
+                        Text.Anchor = TextAnchor.UpperCenter;
+                        Widgets.Label(new Rect(box.x - 4f, box.yMax + 5f, box.width + 8f, 18f), avg.ToString("0") + (ps != Passion.None ? "*" : ""));
+                    }
                     GUI.color = Color.white;
                 }
                 if (on && pr > 0)
@@ -535,7 +546,7 @@ namespace SloppyHR
             Text.Font = GameFont.Tiny;
             Widgets.Label(new Rect(right.x, y, right.width - 200f, 20f), held.Count == 0
                 ? "CURRENT WORK PRIORITIES   the same as the Work tab."
-                : "WORK PRIORITIES THE GAME USES   boxes are shaded by skill as on the Work tab, with the skill level underneath (* = passion). No box means they can't do that work. The bar shows which title a box comes from; a white frame is a box you set by hand.");
+                : "WORK PRIORITIES THE GAME USES   boxes are shaded by skill as on the Work tab, with the skill level and passion underneath. No box means they can't do that work. The bar shows which title a box comes from; a white frame is a box you set by hand.");
             GUI.color = Color.white;
             int handCount = hand?.Count ?? 0;
             if (handCount > 0)

@@ -86,6 +86,66 @@ namespace SloppyHR
             return benchNoSkill = result;
         }
 
+        // The strongest passion among the skills a kind of work uses, counting passions added by other mods (Vanilla
+        // Skills Expanded and anything built on it). Passion.None when there is none.
+        public static Passion BestPassion(Pawn p, WorkTypeDef wt, out string label)
+        {
+            label = null;
+            Passion best = Passion.None;
+            if (p?.skills == null || wt.relevantSkills.NullOrEmpty()) return best;
+            float bestLearn = -1f;
+            foreach (SkillDef sd in wt.relevantSkills)
+            {
+                SkillRecord rec = p.skills.GetSkill(sd);
+                if (rec == null || rec.TotallyDisabled || rec.passion == Passion.None) continue;
+                float lf = 1f;
+                try { lf = rec.LearnRateFactor(true); } catch { }
+                if (lf > bestLearn) { bestLearn = lf; best = rec.passion; }
+            }
+            if (best != Passion.None) label = PassionLabel(best);
+            return best;
+        }
+
+        // The icon another mod gives a passion, if it has one (null for vanilla passions or when it can't be found).
+        static readonly Dictionary<Passion, Texture2D> passionIcons = new Dictionary<Passion, Texture2D>();
+        public static Texture2D PassionIcon(Passion passion)
+        {
+            if (passion == Passion.None) return null;
+            if (passionIcons.TryGetValue(passion, out Texture2D cached)) return cached;
+            Texture2D tex = null;
+            try
+            {
+                VseInit();
+                if (vsePassionToDef != null && vsePassionToDef.Invoke(null, new object[] { passion }) is Def d)
+                {
+                    var tr = HarmonyLib.Traverse.Create(d);
+                    foreach (string name in new[] { "Icon", "icon", "workBoxIcon", "WorkBoxIcon" })
+                    {
+                        try
+                        {
+                            object v = tr.Property(name).PropertyExists() ? tr.Property(name).GetValue() : tr.Field(name).FieldExists() ? tr.Field(name).GetValue() : null;
+                            if (v is Texture2D t2) { tex = t2; break; }
+                        }
+                        catch { }
+                    }
+                    if (tex == null)
+                        foreach (string name in new[] { "iconPath", "workBoxIconPath" })
+                        {
+                            try
+                            {
+                                string path = tr.Field(name).FieldExists() ? tr.Field(name).GetValue<string>() : null;
+                                if (!path.NullOrEmpty()) { tex = ContentFinder<Texture2D>.Get(path, false); if (tex != null) break; }
+                            }
+                            catch { }
+                        }
+                }
+            }
+            catch { }
+            if (tex == null) tex = passion == Passion.Minor ? SkillUI.PassionMinorIcon : passion == Passion.Major ? SkillUI.PassionMajorIcon : null;
+            passionIcons[passion] = tex;
+            return tex;
+        }
+
         // "Medicine 7 (burning)" for each skill a kind of work uses; null for unskilled work.
         public static string SkillText(Pawn p, WorkTypeDef wt)
         {

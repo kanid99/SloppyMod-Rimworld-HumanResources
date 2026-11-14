@@ -7,7 +7,7 @@
     <RootNamespace>SloppyHR</RootNamespace>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>0.9.12</Version>
+    <Version>0.9.13</Version>
     <OutputPath>../../Assemblies/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
